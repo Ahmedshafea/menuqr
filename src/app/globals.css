@@ -815,12 +815,23 @@ footer small {
 }
 .landing-heading {
   max-width: 670px;
-  margin-bottom: 50px;
+  margin: 0 auto 3rem;
 }
+
 .landing-heading.centered {
   margin-inline: auto;
   text-align: center;
 }
+.landing-heading span {
+  display: inline-block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #ff5a2c;
+  margin-bottom: 1rem;
+}
+
 .landing-heading > span,
 .why-copy > span,
 .final-cta span {
@@ -830,7 +841,16 @@ footer small {
   letter-spacing: 1.4px;
   text-transform: uppercase;
 }
-.landing-heading h2,
+
+.landing-heading h2 {
+  margin: 0;
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #1f2b24;
+}
+
 .why-copy h2,
 .final-cta h2 {
   margin: 12px 0 15px;
@@ -844,7 +864,15 @@ footer small {
   font-weight: 850;
   line-height: 1.25;
 }
-.landing-heading p,
+
+.landing-heading p {
+  max-width: 700px;
+  margin: 1.5rem auto 0;
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  line-height: 1.7;
+  color: #667085;
+}
+
 .why-copy p {
   color: #68736e;
   line-height: 1.75;
@@ -1360,7 +1388,19 @@ footer small {
   .landing-footer small {
     text-align: center;
   }
+  .landing-heading h2 {
+    font-size: 2.8rem;
+    line-height: 1.15;
+  }
+  .landing-heading p {
+    font-size: 1rem;
+    padding: 0 1rem;
+  }
+
+
 }
+
+
 
 @media (max-width: 420px) {
   .landing-nav .brand span {
