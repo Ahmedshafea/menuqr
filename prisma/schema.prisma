@@ -1,0 +1,346 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  STAFF
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  name               String
+  email              String               @unique
+  passwordHash       String
+  role               Role                 @default(OWNER)
+  emailVerified      DateTime?
+  image              String?
+  phone              String?
+  restaurantId       String?
+  restaurant         Restaurant?          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  ownedRestaurants   Restaurant[]         @relation("Owner")
+  verificationTokens VerificationToken[]
+  resetTokens        PasswordResetToken[]
+  auditLogs          AuditLog[]
+  customerOrders     Order[]              @relation("CustomerOrders")
+  orderMessages      OrderMessage[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([restaurantId])
+}
+
+model VerificationToken {
+  id      String   @id @default(cuid())
+  token   String   @unique
+  expires DateTime
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  token   String   @unique
+  expires DateTime
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Restaurant {
+  id            String           @id @default(cuid())
+  name          String
+  nameAr        String?
+  slug          String           @unique
+  description   String?
+  descriptionAr String?
+  email         String?
+  phone         String?
+  whatsapp      String
+  address       String?
+  mapUrl        String?
+  facebookUrl   String?
+  instagramUrl  String?
+  logoUrl       String?
+  coverUrl      String?
+  primaryColor  String           @default("#e85d2a")
+  accentColor   String           @default("#f6c453")
+  currency      String           @default("EGP")
+  locale        String           @default("en")
+  isActive      Boolean          @default(true)
+  ownerId       String
+  owner         User             @relation("Owner", fields: [ownerId], references: [id])
+  staff         User[]
+  branches      Branch[]
+  categories    Category[]
+  products      Product[]
+  orders        Order[]
+  subscriptions Subscription[]
+  settings      Setting?
+  analytics     AnalyticsEvent[]
+  auditLogs     AuditLog[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+model Branch {
+  id           String        @id @default(cuid())
+  name         String
+  address      String
+  mapUrl       String?
+  phone        String?
+  isActive     Boolean       @default(true)
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  workingHours WorkingHour[]
+  orders       Order[]
+  createdAt    DateTime      @default(now())
+}
+
+model WorkingHour {
+  id        String  @id @default(cuid())
+  dayOfWeek Int
+  opensAt   String?
+  closesAt  String?
+  isClosed  Boolean @default(false)
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, dayOfWeek])
+}
+
+model Category {
+  id           String     @id @default(cuid())
+  name         String
+  nameAr       String?
+  description  String?
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  products     Product[]
+  createdAt    DateTime   @default(now())
+
+  @@index([restaurantId, sortOrder])
+}
+
+model Product {
+  id            String         @id @default(cuid())
+  name          String
+  nameAr        String?
+  description   String?
+  descriptionAr String?
+  price         Decimal        @db.Decimal(10, 2)
+  isAvailable   Boolean        @default(true)
+  isFeatured    Boolean        @default(false)
+  sortOrder     Int            @default(0)
+  stock         Int?
+  restaurantId  String
+  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  images        ProductImage[]
+  extras        Extra[]
+  orderItems    OrderItem[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([restaurantId, categoryId])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  url       String
+  publicId  String?
+  alt       String?
+  sortOrder Int     @default(0)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Extra {
+  id              String           @id @default(cuid())
+  name            String
+  nameAr          String?
+  price           Decimal          @db.Decimal(10, 2)
+  isAvailable     Boolean          @default(true)
+  productId       String
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItemExtras OrderItemExtra[]
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  customerName    String
+  customerPhone   String
+  deliveryAddress String?
+  notes           String?
+  subtotal        Decimal     @db.Decimal(10, 2)
+  total           Decimal     @db.Decimal(10, 2)
+  status          OrderStatus @default(PENDING)
+  accessToken     String      @unique
+  customerId      String?
+  customer        User?       @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: SetNull)
+  restaurantId    String
+  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  branchId        String?
+  branch          Branch?     @relation(fields: [branchId], references: [id])
+  items           OrderItem[]
+  messages        OrderMessage[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([restaurantId, createdAt])
+  @@index([customerId, createdAt])
+}
+
+model OrderMessage {
+  id        String   @id @default(cuid())
+  body      String
+  sender    Role
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model OrderItem {
+  id          String           @id @default(cuid())
+  productName String
+  unitPrice   Decimal          @db.Decimal(10, 2)
+  quantity    Int
+  notes       String?
+  orderId     String
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  extras      OrderItemExtra[]
+}
+
+model OrderItemExtra {
+  id          String    @id @default(cuid())
+  name        String
+  price       Decimal   @db.Decimal(10, 2)
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  extraId     String?
+  extra       Extra?    @relation(fields: [extraId], references: [id], onDelete: SetNull)
+}
+
+model Plan {
+  id               String          @id @default(cuid())
+  name             String          @unique
+  price            Decimal         @db.Decimal(10, 2)
+  interval         BillingInterval @default(MONTHLY)
+  maxProducts      Int
+  maxBranches      Int
+  maxStaff         Int
+  analyticsEnabled Boolean         @default(false)
+  customDomain     Boolean         @default(false)
+  subscriptions    Subscription[]
+  createdAt        DateTime        @default(now())
+}
+
+model Subscription {
+  id           String             @id @default(cuid())
+  status       SubscriptionStatus @default(TRIALING)
+  startsAt     DateTime           @default(now())
+  endsAt       DateTime?
+  restaurantId String
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  planId       String
+  plan         Plan               @relation(fields: [planId], references: [id])
+  payments     Payment[]
+  createdAt    DateTime           @default(now())
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("EGP")
+  status         PaymentStatus @default(PENDING)
+  provider       String?
+  reference      String?       @unique
+  subscriptionId String
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+}
+
+model Setting {
+  id            String     @id @default(cuid())
+  taxRate       Decimal    @default(0) @db.Decimal(5, 2)
+  deliveryFee   Decimal    @default(0) @db.Decimal(10, 2)
+  minimumOrder  Decimal    @default(0) @db.Decimal(10, 2)
+  allowOrdering Boolean    @default(true)
+  estimatedOrderMinutes Int @default(30)
+  restaurantId  String     @unique
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsEvent {
+  id           String     @id @default(cuid())
+  type         String
+  productId    String?
+  metadata     Json?
+  ipHash       String?
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@index([restaurantId, type, createdAt])
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  action       String
+  entity       String
+  entityId     String?
+  metadata     Json?
+  ipAddress    String?
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+
+  @@index([restaurantId, createdAt])
+}

@@ -1,0 +1,206 @@
+.order-tracking {
+  min-height: 100vh;
+  background: #f3f5f1;
+  padding: 36px 18px;
+}
+.order-shell {
+  width: min(1050px, 100%);
+  margin: auto;
+}
+.order-head {
+  background: #17352c;
+  color: #fff;
+  border-radius: 24px;
+  padding: 28px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.order-head > div {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.order-logo,
+.order-head > div > svg {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  background: #fff center/cover no-repeat;
+  padding: 7px;
+  color: #17352c;
+  flex: none;
+}
+.order-head small {
+  color: #f5c947;
+}
+.order-head h1 {
+  margin: 4px 0;
+  font: 600 31px var(--font-display);
+}
+.order-head p {
+  margin: 0;
+  color: #cbd9d3;
+  font-size: 13px;
+}
+.order-status {
+  padding: 9px 14px;
+  border-radius: 99px;
+  background: #fff;
+  color: #17352c;
+  font-weight: 800;
+  font-size: 12px;
+}
+.order-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+.order-column {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.order-card {
+  background: #fff;
+  border: 1px solid #e0e5e1;
+  border-radius: 18px;
+  padding: 24px;
+}
+.order-card h2 {
+  margin: 0 0 18px;
+  font: 600 21px var(--font-display);
+}
+.tracking-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf0ed;
+}
+.tracking-item span {
+  display: grid;
+  gap: 5px;
+}
+.tracking-item small {
+  color: #78837d;
+}
+.tracking-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 20px;
+  padding-top: 20px;
+}
+.tracking-total strong {
+  color: var(--orange);
+}
+.order-details p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.order-details svg {
+  width: 17px;
+}
+.whatsapp-button {
+  background: #25d366;
+  color: #fff;
+  margin-top: 12px;
+}
+.order-messages {
+  display: grid;
+  gap: 10px;
+  max-height: 380px;
+  overflow: auto;
+}
+.order-message {
+  max-width: 82%;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: #f0f2ef;
+}
+.order-message p {
+  margin: 5px 0;
+  white-space: pre-wrap;
+}
+.order-message small,
+.order-message time {
+  font-size: 10px;
+  color: #758079;
+}
+.restaurant-message {
+  justify-self: start;
+  border-start-start-radius: 3px;
+}
+.customer-message {
+  justify-self: end;
+  background: #fff0e9;
+  border-end-end-radius: 3px;
+}
+.message-form,
+.tracking-register {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.message-form textarea {
+  min-height: 85px;
+  resize: vertical;
+}
+.message-form textarea,
+.tracking-register input {
+  border: 1px solid #d6ddd8;
+  border-radius: 10px;
+  padding: 12px;
+  font: inherit;
+}
+.message-form button {
+  justify-self: end;
+  border: 0;
+}
+.tracking-register label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.tracking-register small {
+  color: #758079;
+}
+.tracking-register button {
+  border: 0;
+}
+.order-muted-link {
+  display: block;
+  text-align: center;
+  color: #99a19d;
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .order-tracking {
+    padding: 12px;
+  }
+  .order-layout {
+    grid-template-columns: 1fr;
+  }
+  .order-head {
+    align-items: flex-start;
+    padding: 22px;
+  }
+  .order-head h1 {
+    font-size: 24px;
+  }
+  .order-head p {
+    display: none;
+  }
+  .order-status {
+    white-space: nowrap;
+  }
+  .order-message {
+    max-width: 92%;
+  }
+}

@@ -1,0 +1,619 @@
+import Link from "next/link";
+import { Eye, Pencil, Plus } from "lucide-react";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+import { prisma } from "@/lib/prisma";
+import { requireTenant } from "@/lib/tenant";
+import {
+  uploadRestaurantImage,
+  deleteRestaurantImage,
+} from "@/lib/supabase/storage";
+import { CloseDetailsButton } from "@/components/close-details-button";
+import { ProductImportDialog } from "@/components/product-import-dialog";
+import { DeleteProductButton } from "@/components/delete-product-button";
+
+export const dynamic = "force-dynamic";
+
+export default async function MenuManagementPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; result?: string; page?: string }>;
+}) {
+  const { restaurantId } = await requireTenant();
+  const { q = "", result, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const take = 25;
+  const [
+    menuText,
+    toolsText,
+    common,
+    locale,
+    restaurant,
+    categories,
+    products,
+    totalProducts,
+  ] = await Promise.all([
+    getTranslations("menuAdmin"),
+    getTranslations("productTools"),
+    getTranslations("common"),
+    getLocale(),
+    prisma.restaurant.findUniqueOrThrow({
+      where: { id: restaurantId },
+      select: { slug: true, currency: true },
+    }),
+    prisma.category.findMany({
+      where: { restaurantId },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, nameAr: true },
+    }),
+    prisma.product.findMany({
+      where: {
+        restaurantId,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { nameAr: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        category: true,
+        images: { orderBy: { sortOrder: "asc" }, take: 1 },
+        extras: true,
+      },
+      orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+      skip: (page - 1) * take,
+      take,
+    }),
+    prisma.product.count({
+      where: {
+        restaurantId,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { nameAr: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+    }),
+  ]);
+  const productToolKeys = new Set([
+    "replaceImage",
+    "updated",
+    "edit",
+    "editProduct",
+    "saveChanges",
+    "featured",
+    "importProducts",
+    "importDescription",
+    "chooseFile",
+    "startImport",
+    "downloadXlsx",
+    "downloadCsv",
+    "importSuccess",
+    "importError",
+    "deleteConfirmation",
+  ]);
+  const t = (key: string) =>
+    productToolKeys.has(key) ? toolsText(key as never) : menuText(key as never);
+
+  async function createProduct(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const name = String(form.get("name") ?? "").trim();
+    const nameAr = String(form.get("nameAr") ?? "").trim();
+    const description = String(form.get("description") ?? "").trim();
+    const descriptionAr = String(form.get("descriptionAr") ?? "").trim();
+    const price = Number(form.get("price"));
+    const stockText = String(form.get("stock") ?? "").trim();
+    let categoryId = String(form.get("categoryId") ?? "");
+    const newCategory = String(form.get("newCategory") ?? "").trim();
+    const newCategoryAr = String(form.get("newCategoryAr") ?? "").trim();
+    const imageFile = form.get("image");
+    if (
+      name.length < 2 ||
+      !Number.isFinite(price) ||
+      price < 0 ||
+      (!categoryId && !newCategory && !newCategoryAr)
+    )
+      redirect("/dashboard/menu?result=invalid");
+    const uploaded =
+      imageFile instanceof File && imageFile.size > 0
+        ? await uploadRestaurantImage({
+            bucket: "product-images",
+            restaurantId,
+            file: imageFile,
+          })
+        : null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (categoryId) {
+          if (
+            !(await tx.category.findFirst({
+              where: { id: categoryId, restaurantId },
+              select: { id: true },
+            }))
+          )
+            throw new Error("Invalid category");
+        } else {
+          const category = await tx.category.create({
+            data: {
+              restaurantId,
+              name: newCategory || newCategoryAr,
+              nameAr: newCategoryAr || null,
+              sortOrder: await tx.category.count({ where: { restaurantId } }),
+            },
+          });
+          categoryId = category.id;
+        }
+        await tx.product.create({
+          data: {
+            restaurantId,
+            categoryId,
+            name,
+            nameAr: nameAr || null,
+            description: description || null,
+            descriptionAr: descriptionAr || null,
+            price,
+            stock: stockText
+              ? Math.max(0, Number.parseInt(stockText, 10) || 0)
+              : null,
+            isAvailable: form.get("isAvailable") === "on",
+            sortOrder: await tx.product.count({
+              where: { restaurantId, categoryId },
+            }),
+            ...(uploaded
+              ? {
+                  images: {
+                    create: {
+                      url: uploaded.url,
+                      publicId: uploaded.path,
+                      alt: name,
+                    },
+                  },
+                }
+              : {}),
+          },
+        });
+      });
+    } catch (error) {
+      if (uploaded)
+        await deleteRestaurantImage(
+          "product-images",
+          uploaded.path,
+          restaurantId,
+        );
+      throw error;
+    }
+    revalidatePath("/dashboard/menu");
+    revalidateTag("public-menu");
+    revalidatePath(`/menu/${restaurant.slug}`);
+    redirect("/dashboard/menu?result=created");
+  }
+
+  async function toggleProduct(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const id = String(form.get("id"));
+    const product = await prisma.product.findFirst({
+      where: { id, restaurantId },
+      select: { isAvailable: true },
+    });
+    if (product)
+      await prisma.product.update({
+        where: { id },
+        data: { isAvailable: !product.isAvailable },
+      });
+    revalidatePath("/dashboard/menu");
+    revalidatePath(`/menu/${restaurant.slug}`);
+    revalidateTag("public-menu");
+  }
+  async function updateProduct(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const id = String(form.get("id") ?? "");
+    const categoryId = String(form.get("categoryId") ?? "");
+    const name = String(form.get("name") ?? "").trim();
+    const nameAr = String(form.get("nameAr") ?? "").trim();
+    const price = Number(form.get("price"));
+    const stockText = String(form.get("stock") ?? "").trim();
+    const [product, category] = await Promise.all([
+      prisma.product.findFirst({
+        where: { id, restaurantId },
+        select: {
+          images: {
+            where: { publicId: { not: null } },
+            select: { publicId: true },
+          },
+        },
+      }),
+      prisma.category.findFirst({
+        where: { id: categoryId, restaurantId },
+        select: { id: true },
+      }),
+    ]);
+    if (
+      !product ||
+      !category ||
+      name.length < 2 ||
+      !Number.isFinite(price) ||
+      price < 0
+    )
+      redirect("/dashboard/menu?result=invalid");
+    const imageFile = form.get("image");
+    const uploaded =
+      imageFile instanceof File && imageFile.size > 0
+        ? await uploadRestaurantImage({
+            bucket: "product-images",
+            restaurantId,
+            file: imageFile,
+          })
+        : null;
+    try {
+      await prisma.product.update({
+        where: { id },
+        data: {
+          categoryId,
+          name,
+          nameAr: nameAr || null,
+          description: String(form.get("description") ?? "").trim() || null,
+          descriptionAr: String(form.get("descriptionAr") ?? "").trim() || null,
+          price,
+          stock: stockText
+            ? Math.max(0, Number.parseInt(stockText, 10) || 0)
+            : null,
+          isAvailable: form.get("isAvailable") === "on",
+          isFeatured: form.get("isFeatured") === "on",
+          ...(uploaded
+            ? {
+                images: {
+                  deleteMany: {},
+                  create: {
+                    url: uploaded.url,
+                    publicId: uploaded.path,
+                    alt: name,
+                  },
+                },
+              }
+            : {}),
+        },
+      });
+      if (uploaded)
+        await Promise.all(
+          product.images.flatMap((image) =>
+            image.publicId
+              ? [
+                  deleteRestaurantImage(
+                    "product-images",
+                    image.publicId,
+                    restaurantId,
+                  ),
+                ]
+              : [],
+          ),
+        );
+    } catch (error) {
+      if (uploaded)
+        await deleteRestaurantImage(
+          "product-images",
+          uploaded.path,
+          restaurantId,
+        );
+      throw error;
+    }
+    revalidatePath("/dashboard/menu");
+    revalidatePath(`/menu/${restaurant.slug}`);
+    revalidateTag("public-menu");
+    redirect("/dashboard/menu?result=updated");
+  }
+  async function deleteProduct(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const id = String(form.get("id"));
+    const product = await prisma.product.findFirst({
+      where: { id, restaurantId },
+      select: {
+        images: {
+          where: { publicId: { not: null } },
+          select: { publicId: true },
+        },
+      },
+    });
+    if (product) {
+      await prisma.product.delete({ where: { id } });
+      await Promise.all(
+        product.images.flatMap((image) =>
+          image.publicId
+            ? [
+                deleteRestaurantImage(
+                  "product-images",
+                  image.publicId,
+                  restaurantId,
+                ),
+              ]
+            : [],
+        ),
+      );
+    }
+    revalidatePath("/dashboard/menu");
+    revalidatePath(`/menu/${restaurant.slug}`);
+    revalidateTag("public-menu");
+  }
+
+  const money = (value: number) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: restaurant.currency,
+    }).format(value);
+  const fields = (product?: (typeof products)[number]) => (
+    <>
+      <label>
+        {t("nameEn")}
+        <input
+          name="name"
+          defaultValue={product?.name}
+          required
+          minLength={2}
+        />
+      </label>
+      <label>
+        {t("nameAr")}
+        <input name="nameAr" defaultValue={product?.nameAr ?? ""} dir="rtl" />
+      </label>
+      <label className="full">
+        {product ? toolsText("replaceImage") : t("productImage")}
+        <input
+          name="image"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/avif"
+        />
+      </label>
+      <label className="full">
+        {t("descriptionEn")}
+        <textarea
+          name="description"
+          defaultValue={product?.description ?? ""}
+        />
+      </label>
+      <label className="full">
+        {t("descriptionAr")}
+        <textarea
+          name="descriptionAr"
+          defaultValue={product?.descriptionAr ?? ""}
+          dir="rtl"
+        />
+      </label>
+      <label>
+        {t("price")}
+        <input
+          name="price"
+          type="number"
+          min="0"
+          step="0.01"
+          defaultValue={product ? Number(product.price) : undefined}
+          required
+        />
+      </label>
+      <label>
+        {t("stock")}
+        <input
+          name="stock"
+          type="number"
+          min="0"
+          defaultValue={product?.stock ?? ""}
+        />
+      </label>
+      {product ? (
+        <label>
+          {t("category")}
+          <select name="categoryId" defaultValue={product.categoryId}>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {locale === "ar" && category.nameAr
+                  ? category.nameAr
+                  : category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <>
+          {categories.length > 0 && (
+            <label>
+              {t("category")}
+              <select name="categoryId" defaultValue="">
+                <option value="">{t("newCategoryOption")}</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {locale === "ar" && category.nameAr
+                      ? category.nameAr
+                      : category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            {t("newCategory")}
+            <input name="newCategory" />
+          </label>
+          <label>
+            {t("newCategoryAr")}
+            <input name="newCategoryAr" dir="rtl" />
+          </label>
+        </>
+      )}
+      <label className="check-label">
+        <input
+          name="isAvailable"
+          type="checkbox"
+          defaultChecked={product?.isAvailable ?? true}
+        />
+        {common("available")}
+      </label>
+      {product && (
+        <label className="check-label">
+          <input
+            name="isFeatured"
+            type="checkbox"
+            defaultChecked={product.isFeatured}
+          />
+          {toolsText("featured")}
+        </label>
+      )}
+    </>
+  );
+  return (
+    <section className="dash-main">
+      <header>
+        <div>
+          <small>{t("products")}</small>
+          <h1>{t("title")}</h1>
+          <p>{t("subtitle")}</p>
+        </div>
+        <div className="menu-header-actions">
+          <ProductImportDialog
+            labels={{
+              title: t("importProducts"),
+              description: t("importDescription"),
+              choose: t("chooseFile"),
+              upload: t("startImport"),
+              templateXlsx: t("downloadXlsx"),
+              templateCsv: t("downloadCsv"),
+              success: t("importSuccess"),
+              error: t("importError"),
+              close: common("close"),
+            }}
+          />
+          <details className="product-create">
+            <summary className="button primary">
+              <Plus />
+              {t("addProduct")}
+            </summary>
+            <div className="product-form-panel">
+              <CloseDetailsButton />
+              <h2>{t("addProduct")}</h2>
+              <form action={createProduct} className="settings-grid">
+                {fields()}
+                <button className="button primary full">
+                  {t("createProduct")}
+                </button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </header>
+      {result === "created" && <p className="form-success">{t("created")}</p>}
+      {result === "updated" && <p className="form-success">{t("updated")}</p>}
+      {result === "invalid" && <p className="form-error">{t("invalid")}</p>}
+      <article className="dash-card management-card">
+        <div className="management-toolbar">
+          <form className="dashboard-search">
+            <input name="q" defaultValue={q} placeholder={t("search")} />
+          </form>
+          <Link href={`/menu/${restaurant.slug}`} className="button ghost">
+            <Eye />
+            {t("preview")}
+          </Link>
+        </div>
+        {products.length ? (
+          <table>
+            <thead>
+              <tr>
+                <th>{t("product")}</th>
+                <th>{t("category")}</th>
+                <th>{t("price")}</th>
+                <th>{t("stock")}</th>
+                <th>{t("availability")}</th>
+                <th>{t("actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product) => (
+                <tr key={product.id}>
+                  <td>
+                    <strong>
+                      {locale === "ar" && product.nameAr
+                        ? product.nameAr
+                        : product.name}
+                    </strong>
+                  </td>
+                  <td>
+                    {locale === "ar" && product.category.nameAr
+                      ? product.category.nameAr
+                      : product.category.name}
+                  </td>
+                  <td>{money(Number(product.price))}</td>
+                  <td>{product.stock ?? "—"}</td>
+                  <td>
+                    <form action={toggleProduct}>
+                      <input type="hidden" name="id" value={product.id} />
+                      <button
+                        className={`status ${product.isAvailable ? "completed" : "cancelled"}`}
+                      >
+                        {product.isAvailable
+                          ? common("available")
+                          : common("hidden")}
+                      </button>
+                    </form>
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <details className="product-create edit-product">
+                        <summary className="icon-edit" aria-label={t("edit")}>
+                          <Pencil />
+                        </summary>
+                        <div className="product-form-panel">
+                          <CloseDetailsButton />
+                          <h2>{t("editProduct")}</h2>
+                          <form
+                            action={updateProduct}
+                            className="settings-grid"
+                          >
+                            <input type="hidden" name="id" value={product.id} />
+                            {fields(product)}
+                            <button className="button primary full">
+                              {t("saveChanges")}
+                            </button>
+                          </form>
+                        </div>
+                      </details>
+                      <DeleteProductButton
+                        id={product.id}
+                        action={deleteProduct}
+                        label={t("delete")}
+                        confirmation={t("deleteConfirmation")}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>{t("noProducts")}</p>
+        )}
+        <div className="pagination">
+          {page > 1 && (
+            <Link href={`?q=${encodeURIComponent(q)}&page=${page - 1}`}>
+              {common("previous")}
+            </Link>
+          )}
+          <span>
+            {page} / {Math.max(1, Math.ceil(totalProducts / take))}
+          </span>
+          {page * take < totalProducts && (
+            <Link href={`?q=${encodeURIComponent(q)}&page=${page + 1}`}>
+              {common("next")}
+            </Link>
+          )}
+        </div>
+      </article>
+    </section>
+  );
+}

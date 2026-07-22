@@ -1,0 +1,248 @@
+"use client";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import dynamic from "next/dynamic";
+import Image from "next/image";
+const TurnstileWidget = dynamic(
+  () =>
+    import("@/components/turnstile-widget").then(
+      (module) => module.TurnstileWidget,
+    ),
+  { ssr: false },
+);
+export type MenuProduct = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  image: string;
+  featured?: boolean;
+  extras: { id: string; name: string; price: number }[];
+};
+export function MenuClient({
+  restaurant,
+  products,
+  orderingEnabled = true,
+}: {
+  restaurant: { name: string; slug: string; currency: string };
+  products: MenuProduct[];
+  orderingEnabled?: boolean;
+}) {
+  const t = useTranslations("publicMenu");
+  const common = useTranslations("common");
+  const locale = useLocale();
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("__all");
+  const [cart, setCart] = useState<Record<string, number>>({});
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const categories = [...new Set(products.map((product) => product.category))];
+  const visible = products.filter(
+    (product) =>
+      (category === "__all" || product.category === category) &&
+      product.name.toLowerCase().includes(query.toLowerCase()),
+  );
+  const count = Object.values(cart).reduce((sum, value) => sum + value, 0);
+  const total = useMemo(
+    () =>
+      products.reduce(
+        (sum, product) => sum + (cart[product.id] || 0) * product.price,
+        0,
+      ),
+    [cart, products],
+  );
+  const money = (value: number) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: restaurant.currency,
+    }).format(value);
+  const update = (id: string, amount: number) => {
+    if (!orderingEnabled) return;
+    setCart((current) => ({
+      ...current,
+      [id]: Math.max(0, (current[id] || 0) + amount),
+    }));
+  };
+  async function checkout(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        restaurantSlug: restaurant.slug,
+        customerName: form.get("name"),
+        customerPhone: form.get("phone"),
+        deliveryAddress: form.get("address") || undefined,
+        notes: form.get("notes") || undefined,
+        turnstileToken,
+        items: products
+          .filter((product) => cart[product.id])
+          .map((product) => ({
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            quantity: cart[product.id],
+            extras: [],
+          })),
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setError(
+        typeof body.error === "string"
+          ? body.error
+          : (body.error?.code ?? common("noData")),
+      );
+      setLoading(false);
+      return;
+    }
+    window.location.href = body.whatsappUrl;
+  }
+  return (
+    <>
+      {products.length ? (
+        <>
+          <div className="menu-tools">
+            <div className="menu-search">
+              <Search />
+              <input
+                aria-label={t("search")}
+                placeholder={t("search")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <div className="menu-cats">
+              <button
+                className={category === "__all" ? "active" : ""}
+                onClick={() => setCategory("__all")}
+              >
+                {common("all")}
+              </button>
+              {categories.map((value) => (
+                <button
+                  className={value === category ? "active" : ""}
+                  onClick={() => setCategory(value)}
+                  key={value}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="product-grid">
+            {visible.map((product) => (
+              <article className="product-card" key={product.id}>
+                <Link
+                  href={`/menu/${restaurant.slug}/product/${product.id}`}
+                  className="product-detail-link"
+                >
+                  <div className="product-photo">
+                    {product.image && (
+                      <Image
+                        src={product.image}
+                        alt={product.name}
+                        fill
+                        sizes="(max-width: 540px) 100vw, (max-width: 800px) 50vw, 33vw"
+                      />
+                    )}
+                    {product.featured && <span>{t("featured")}</span>}
+                  </div>
+                </Link>
+                <div className="product-info">
+                  <div>
+                    <Link
+                      href={`/menu/${restaurant.slug}/product/${product.id}`}
+                    >
+                      <h3>{product.name}</h3>
+                    </Link>
+                    <p>{product.description}</p>
+                    <strong>{money(product.price)}</strong>
+                  </div>
+                  {cart[product.id] ? (
+                    <div className="qty">
+                      <button onClick={() => update(product.id, -1)}>
+                        <Minus />
+                      </button>
+                      <b>{cart[product.id]}</b>
+                      <button onClick={() => update(product.id, 1)}>
+                        <Plus />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="add"
+                      onClick={() => update(product.id, 1)}
+                      aria-label={t("add", { product: product.name })}
+                    >
+                      <Plus />
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p>{t("empty")}</p>
+      )}
+      {count > 0 && (
+        <button className="cart-bar" onClick={() => setOpen(true)}>
+          <span>
+            <ShoppingBag />
+            {t("cart", { count })}
+          </span>
+          <b>
+            {t("viewOrder")} · {money(total)}
+          </b>
+        </button>
+      )}
+      {open && (
+        <div className="cart-overlay">
+          <div className="cart-sheet">
+            <button className="close" onClick={() => setOpen(false)}>
+              <X />
+            </button>
+            <h2>{t("yourOrder")}</h2>
+            <p>{t("checkoutHelp")}</p>
+            <div className="cart-lines">
+              {products
+                .filter((product) => cart[product.id])
+                .map((product) => (
+                  <div key={product.id}>
+                    <span>
+                      {cart[product.id]} × {product.name}
+                    </span>
+                    <b>{money(product.price * cart[product.id])}</b>
+                  </div>
+                ))}
+            </div>
+            <div className="cart-total">
+              <span>{t("total")}</span>
+              <strong>{money(total)}</strong>
+            </div>
+            <form onSubmit={checkout}>
+              <input name="name" required placeholder={t("name")} />
+              <input name="phone" required placeholder={t("phone")} />
+              <input name="address" placeholder={t("address")} />
+              <textarea name="notes" placeholder={t("notes")} />
+              <TurnstileWidget onToken={setTurnstileToken} />
+              {error && <p className="form-error">{error}</p>}
+              <button className="button primary large" disabled={loading}>
+                {loading ? common("noData") : t("whatsapp")}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

@@ -1,0 +1,2 @@
+import Link from "next/link"; import { AuthForm } from "@/components/auth-form"; import { getTranslations } from "next-intl/server";
+export default async function Register(){const t=await getTranslations("auth");return <div className="auth-box"><h1>{t("registerTitle")}</h1><p>{t("registerSubtitle")}</p><AuthForm mode="register"/><div className="auth-bottom">{t("existing")} <Link href="/login">{t("signIn")}</Link></div></div>}

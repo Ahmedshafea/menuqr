@@ -1,0 +1,1 @@
+ALTER TABLE "Setting" ADD COLUMN "estimatedOrderMinutes" INTEGER NOT NULL DEFAULT 30;

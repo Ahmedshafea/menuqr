@@ -1,0 +1,84 @@
+{
+  "banner": "Start free during our launch — create a professional QR menu for your restaurant in under 5 minutes.",
+  "navigationLabel": "Main navigation",
+  "hero": {
+    "eyebrow": "A smarter menu for your restaurant",
+    "title": "Turn your restaurant menu into a professional QR menu in minutes",
+    "description": "Create an elegant digital menu, showcase your dishes, and receive customer orders directly on WhatsApp—without extra apps or hardware.",
+    "bullets": { "free": "Start for free", "bilingual": "Arabic and English", "mobile": "Works on every phone" },
+    "primary": "Start for free",
+    "secondary": "View a demo",
+    "previewLabel": "Digital menu and QR code preview",
+    "scan": "Scan the code and try the menu",
+    "open": "Open now",
+    "welcome": "Welcome to",
+    "demoRestaurant": "Taste House",
+    "popular": "Popular",
+    "grills": "Grills",
+    "drinks": "Drinks",
+    "dishOne": "Farmhouse Pizza",
+    "dishTwo": "Chef Burger",
+    "dishDescription": "Fresh and made to order",
+    "priceOne": "EGP 180",
+    "priceTwo": "EGP 145"
+  },
+  "categories": {
+    "label": "FOR EVERY RESTAURANT",
+    "title": "Made for every kind of restaurant",
+    "description": "From restaurants and cafés to dessert shops, give your brand a professional digital menu.",
+    "items": { "burger": "Burgers", "pizza": "Pizza", "cafe": "Café", "desserts": "Desserts", "chicken": "Fried chicken", "grills": "Grills", "oriental": "Oriental food", "sushi": "Sushi" }
+  },
+  "how": {
+    "label": "THREE SIMPLE STEPS",
+    "title": "How it works",
+    "steps": {
+      "account": { "title": "Create your account", "text": "Add your restaurant details and choose your unique menu link." },
+      "menu": { "title": "Add your menu and photos", "text": "Organize categories, then add prices, photos, and extras with ease." },
+      "qr": { "title": "Print your QR for the tables", "text": "Guests scan it and instantly open your menu on their phones." }
+    }
+  },
+  "features": {
+    "label": "EVERYTHING YOU NEED",
+    "title": "A better experience for you and your guests",
+    "description": "Practical tools to showcase an attractive menu and receive orders without complexity.",
+    "items": {
+      "menu": { "title": "Professional menu", "text": "Show food photos, prices, and extras in a polished layout." },
+      "orders": { "title": "Direct orders", "text": "Guests send their order to your restaurant’s WhatsApp in seconds." },
+      "updates": { "title": "Update with ease", "text": "Change prices or add new dishes whenever you need." },
+      "mobile": { "title": "Works on any phone", "text": "No app download or extra hardware required." }
+    }
+  },
+  "showcase": {
+    "label": "INSPIRATION FOR YOUR BRAND",
+    "title": "A menu for every flavor",
+    "description": "A look at how your restaurant menu can appear on your customers’ phones.",
+    "view": "View menu",
+    "open": "Open {name} menu",
+    "items": {
+      "burgerHouse": { "name": "Burger House", "type": "Burgers", "description": "Fresh burgers and signature recipes packed with flavor." },
+      "pizzaNapoli": { "name": "Pizza Napoli", "type": "Italian pizza", "description": "Authentic Neapolitan pizza, straight from the oven." },
+      "coffeeCorner": { "name": "Coffee Corner", "type": "Café", "description": "Specialty coffee and fresh pastries throughout the day." },
+      "sweetCake": { "name": "Sweet Cake", "type": "Desserts", "description": "Cakes and desserts made for your sweetest moments." },
+      "chickenGrill": { "name": "Chicken Grill", "type": "Grills", "description": "Seasoned chicken meals grilled fresh to order." },
+      "sushiBox": { "name": "Sushi Box", "type": "Sushi", "description": "Fresh sushi selections prepared and presented with care." }
+    }
+  },
+  "why": {
+    "label": "REAL VALUE, EVERY DAY",
+    "title": "Why restaurant owners choose MenuQR",
+    "description": "Save time and money while giving guests a fast experience worthy of your restaurant.",
+    "items": { "printing": "Save on menu printing", "updates": "Update prices anytime", "orders": "Receive orders with ease", "qr": "Print-ready QR", "design": "Professional design", "mobile": "Works on any phone" }
+  },
+  "pricing": {
+    "label": "LAUNCH OFFER",
+    "title": "Start for free",
+    "description": "Everything you need to launch your first digital menu, without complicated plans.",
+    "launch": "Free during launch",
+    "cardTitle": "MenuQR account",
+    "price": "Free",
+    "items": { "menu": "Digital menu", "qr": "QR Code", "images": "Product images", "whatsapp": "WhatsApp orders", "languages": "Arabic and English" },
+    "button": "Start free now"
+  },
+  "final": { "label": "LAUNCH TODAY", "title": "Ready to create your restaurant’s first digital menu?", "text": "Start free in under five minutes.", "button": "Create your restaurant" },
+  "footer": "Professional QR menus for modern restaurants."
+}

@@ -1,0 +1,1 @@
+import { describe,expect,it } from "vitest"; import { whatsappUrl } from "./utils"; describe("whatsappUrl",()=>{it("normalizes phone and encodes message",()=>{expect(whatsappUrl("+20 100-000","Hello & أهلاً")).toBe("https://wa.me/20100000?text=Hello%20%26%20%D8%A3%D9%87%D9%84%D8%A7%D9%8B")})})
