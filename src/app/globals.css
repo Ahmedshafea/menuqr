@@ -1887,6 +1887,7 @@ footer small {
 .cart-sheet form button {
   border: 0;
 }
+.checkout-account-choice{margin:8px 0;padding:18px;border:1px solid #dfe5e0;border-radius:14px;background:#f8faf7}.checkout-account-choice h3{margin:0 0 6px;font-size:15px}.checkout-account-choice>p{margin:0;color:#718078;font-size:11px}.checkout-account-choice ul{display:grid;gap:6px;margin:14px 0;padding:0;list-style:none;font-size:11px}.checkout-account-choice li{display:flex;gap:7px}.checkout-account-choice li span{color:#16845d;font-weight:900}.checkout-account-actions{display:flex;gap:8px}.checkout-account-actions button{flex:1}.checkout-account-fields{display:grid;gap:8px;margin-top:12px}.checkout-account-fields small{color:#77827c;font-size:9px}.favorite-button{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid #d9e0db;border-radius:999px;background:#fff;color:#17352c;font-weight:750;cursor:pointer}.favorite-button svg{width:17px}.favorite-button.saved{border-color:#f4b7a4;background:#fff0eb;color:var(--orange)}.favorite-button.saved svg{fill:currentColor}.menu-hero nav form{margin-inline-start:auto;margin-inline-end:12px}.menu-hero nav .favorite-button{font-size:10px}.product-detail-copy>.favorite-button,.product-detail-copy>form{margin:12px 0}.product-detail-copy>form .favorite-button{font-size:11px}
 .menu-footer {
   text-align: center;
   padding: 25px;

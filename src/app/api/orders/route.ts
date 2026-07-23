@@ -6,8 +6,11 @@ import { isRestaurantOpen } from "@/lib/restaurant-hours";
 import { apiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { auth } from "@/auth";
+import { hash } from "bcryptjs";
 
 export async function POST(request: Request) {
+  const session = await auth();
   const ip = requestIp(request);
   const limited = rateLimit(`orders:${ip}`, 10, 10 * 60 * 1000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
@@ -113,7 +116,37 @@ export async function POST(request: Request) {
   });
   const number = `MQ-${Date.now().toString(36).toUpperCase()}`;
   const accessToken = randomBytes(24).toString("base64url");
+  if (!session && data.createAccount && data.email) {
+    const existingAccount = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true } });
+    if (existingAccount) return apiError("ACCOUNT_EXISTS", 409);
+  }
   const order = await prisma.$transaction(async (transaction) => {
+    let customerUserId = session?.user.id ?? null;
+    if (customerUserId) {
+      await transaction.userRole.upsert({
+        where: { userId_role: { userId: customerUserId, role: "CUSTOMER" } },
+        create: { userId: customerUserId, role: "CUSTOMER" },
+        update: {},
+      });
+      await transaction.customerProfile.upsert({
+        where: { userId: customerUserId },
+        create: { userId: customerUserId },
+        update: {},
+      });
+    } else if (data.createAccount && data.email && data.password) {
+      const user = await transaction.user.create({
+        data: {
+          name: data.customerName,
+          phone: data.customerPhone.replace(/\D/g, ""),
+          email: data.email,
+          passwordHash: await hash(data.password, 12),
+          roles: { create: { role: "CUSTOMER" } },
+          customerProfile: { create: {} },
+        },
+        select: { id: true },
+      });
+      customerUserId = user.id;
+    }
     const created = await transaction.order.create({
       data: {
         orderNumber: number,
@@ -124,6 +157,7 @@ export async function POST(request: Request) {
         notes: data.notes,
         subtotal: total,
         total,
+        customerUserId,
         restaurantId: restaurant.id,
         items: {
           create: verified.map((value) => ({

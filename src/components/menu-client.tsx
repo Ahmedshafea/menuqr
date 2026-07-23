@@ -26,21 +26,27 @@ export function MenuClient({
   restaurant,
   products,
   orderingEnabled = true,
+  initialCart = {},
+  customerDefaults,
 }: {
   restaurant: { name: string; slug: string; currency: string };
   products: MenuProduct[];
   orderingEnabled?: boolean;
+  initialCart?: Record<string, number>;
+  customerDefaults?: { name: string; phone: string; address: string };
 }) {
   const t = useTranslations("publicMenu");
+  const accountT = useTranslations("customerAccount.checkout");
   const common = useTranslations("common");
   const locale = useLocale();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("__all");
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Record<string, number>>(initialCart);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [createAccount, setCreateAccount] = useState(false);
   const categories = [...new Set(products.map((product) => product.category))];
   const visible = products.filter(
     (product) =>
@@ -82,6 +88,9 @@ export function MenuClient({
         customerPhone: form.get("phone"),
         deliveryAddress: form.get("address") || undefined,
         notes: form.get("notes") || undefined,
+        createAccount,
+        email: createAccount ? form.get("email") : undefined,
+        password: createAccount ? form.get("password") : undefined,
         turnstileToken,
         items: products
           .filter((product) => cart[product.id])
@@ -230,10 +239,26 @@ export function MenuClient({
               <strong>{money(total)}</strong>
             </div>
             <form onSubmit={checkout}>
-              <input name="name" required placeholder={t("name")} />
-              <input name="phone" required placeholder={t("phone")} />
-              <input name="address" placeholder={t("address")} />
+              <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
+              <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
+              <input name="address" placeholder={t("address")} defaultValue={customerDefaults?.address} />
               <textarea name="notes" placeholder={t("notes")} />
+              {!customerDefaults && <section className="checkout-account-choice">
+                <h3>{accountT("saveInfoTitle")}</h3>
+                <p>{accountT("saveInfoText")}</p>
+                <ul>
+                  {["favoritesRestaurants", "favoritesMeals", "orderHistory", "savedAddresses", "fasterCheckout"].map((key) => <li key={key}><span>✓</span>{accountT(`accountBenefits.${key}`)}</li>)}
+                </ul>
+                <div className="checkout-account-actions">
+                  <button type="button" className={`button ${createAccount ? "primary" : "ghost"}`} onClick={() => setCreateAccount(true)}>{accountT("createAccount")}</button>
+                  <button type="button" className={`button ${!createAccount ? "primary" : "ghost"}`} onClick={() => setCreateAccount(false)}>{accountT("continueGuest")}</button>
+                </div>
+                {createAccount && <div className="checkout-account-fields">
+                  <input name="email" type="email" required placeholder={accountT("accountEmail")} autoComplete="email" />
+                  <input name="password" type="password" required minLength={8} pattern="(?=.*[A-Z])(?=.*[0-9]).{8,}" placeholder={accountT("accountPassword")} autoComplete="new-password" />
+                  <small>{accountT("accountPasswordHint")}</small>
+                </div>}
+              </section>}
               <TurnstileWidget onToken={setTurnstileToken} />
               {error && <p className="form-error">{error}</p>}
               <button className="button primary large" disabled={loading}>

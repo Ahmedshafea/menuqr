@@ -18,19 +18,17 @@ export default async function TeamPage({
   const [t, common, members, total] = await Promise.all([
     getTranslations("team"),
     getTranslations("common"),
-    prisma.user.findMany({
+    prisma.restaurantMember.findMany({
       where: { restaurantId },
       select: {
         id: true,
-        name: true,
-        email: true,
         role: true,
-        emailVerified: true,
+        user: { select: { name: true, email: true, emailVerified: true } },
       },
       orderBy: { createdAt: "asc" },
       skip: (page - 1) * take, take,
     }),
-    prisma.user.count({ where: { restaurantId } }),
+    prisma.restaurantMember.count({ where: { restaurantId } }),
   ]);
   async function addMember(form: FormData) {
     "use server";
@@ -44,19 +42,17 @@ export default async function TeamPage({
       redirect("/dashboard/team?result=invalid");
     const exists = await prisma.user.findUnique({
       where: { email },
-      select: { id: true },
+      select: { id: true, restaurantMemberships: { where: { restaurantId }, select: { id: true } } },
     });
-    if (exists) redirect("/dashboard/team?result=exists");
-    await prisma.user.create({
-      data: {
-        name,
-        email,
-        passwordHash: await hash(password, 12),
-        role: "STAFF",
-        restaurantId,
-        emailVerified: new Date(),
-      },
-    });
+    if (exists?.restaurantMemberships.length) redirect("/dashboard/team?result=exists");
+    if (exists) {
+      await prisma.$transaction([
+        prisma.restaurantMember.create({ data: { userId: exists.id, restaurantId, role: "STAFF" } }),
+        prisma.userRole.upsert({ where: { userId_role: { userId: exists.id, role: "STAFF" } }, create: { userId: exists.id, role: "STAFF" }, update: {} }),
+      ]);
+    } else {
+      await prisma.user.create({ data: { name, email, passwordHash: await hash(password, 12), emailVerified: new Date(), roles: { create: { role: "STAFF" } }, restaurantMemberships: { create: { restaurantId, role: "STAFF" } } } });
+    }
     revalidatePath("/dashboard/team");
     redirect("/dashboard/team?result=created");
   }
@@ -111,8 +107,8 @@ export default async function TeamPage({
               {members.map((member) => (
                 <tr key={member.id}>
                   <td>
-                    <strong>{member.name}</strong>
-                    <small>{member.email}</small>
+                    <strong>{member.user.name}</strong>
+                    <small>{member.user.email}</small>
                   </td>
                   <td>{member.role}</td>
                   <td>

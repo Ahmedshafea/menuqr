@@ -48,10 +48,9 @@ function unsplash(id: string, width = 800) {
 }
 
 export default async function Home() {
-  const [t, nav, qr] = await Promise.all([
+  const [t, nav] = await Promise.all([
     getTranslations("landingV2"),
     getTranslations("nav"),
-    getTranslations("qr"),
   ]);
   const demoUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/demo-bistro`;
 
@@ -116,7 +115,7 @@ export default async function Home() {
           </div>
           <div className="hero-qr">
             <p>{t("hero.scan")}</p>
-            <RestaurantQr menuUrl={demoUrl} slug="demo-bistro" label={qr("scanToOpen")} />
+            <RestaurantQr menuUrl={demoUrl} slug="demo-bistro" label={t("hero.scanToOpen")} />
           </div>
         </div>
       </section>

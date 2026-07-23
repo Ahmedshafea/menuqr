@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const session = await auth();
   const restaurantId = session?.user?.restaurantId;
-  if (!restaurantId)
+  if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
     return apiError("UNAUTHORIZED", 401);
   const form = await request.formData();
   const file = form.get("file");
