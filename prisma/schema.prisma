@@ -8,9 +8,399 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id                    String               @id @default(cuid())
+  name                  String
+  email                 String               @unique
+  passwordHash          String
+  emailVerified         DateTime?
+  image                 String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  phone                 String?
+  language              String               @default("ar")
+  role                  String?
+  auditLogs             AuditLog[]
+  customerProfile       CustomerProfile?
+  customerOrders        Order[]              @relation("CustomerOrders")
+  orderMessages         OrderMessage[]
+  resetTokens           PasswordResetToken[]
+  restaurantMemberships RestaurantMember[]
+  roles                 UserRole[]
+  verificationTokens    VerificationToken[]
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  role      Role
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([role])
+}
+
+model RestaurantMember {
+  id           String     @id @default(cuid())
+  userId       String
+  restaurantId String
+  role         Role       @default(STAFF)
+  createdAt    DateTime   @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, restaurantId])
+  @@index([restaurantId, role])
+}
+
+model CustomerProfile {
+  id                  String                       @id @default(cuid())
+  userId              String                       @unique
+  avatar              String?
+  birthDate           DateTime?
+  marketingConsent    Boolean                      @default(false)
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  addresses           CustomerAddress[]
+  favoriteProducts    CustomerFavoriteProduct[]
+  favoriteRestaurants CustomerFavoriteRestaurant[]
+  user                User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CustomerAddress {
+  id         String          @id @default(cuid())
+  customerId String
+  title      String
+  address    String
+  latitude   Decimal?        @db.Decimal(10, 7)
+  longitude  Decimal?        @db.Decimal(10, 7)
+  isDefault  Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, isDefault])
+}
+
+model CustomerFavoriteRestaurant {
+  customerId   String
+  restaurantId String
+  createdAt    DateTime        @default(now())
+  customer     CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, restaurantId])
+  @@index([restaurantId])
+}
+
+model CustomerFavoriteProduct {
+  customerId String
+  productId  String
+  createdAt  DateTime        @default(now())
+  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, productId])
+  @@index([productId])
+}
+
+model VerificationToken {
+  id      String   @id @default(cuid())
+  token   String   @unique
+  expires DateTime
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  token   String   @unique
+  expires DateTime
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Restaurant {
+  id                String                       @id @default(cuid())
+  name              String
+  nameAr            String?
+  slug              String                       @unique
+  description       String?
+  email             String?
+  phone             String?
+  whatsapp          String
+  logoUrl           String?
+  coverUrl          String?
+  primaryColor      String                       @default("#e85d2a")
+  accentColor       String                       @default("#f6c453")
+  currency          String                       @default("EGP")
+  locale            String                       @default("en")
+  isActive          Boolean                      @default(true)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  address           String?
+  descriptionAr     String?
+  mapUrl            String?
+  facebookUrl       String?
+  instagramUrl      String?
+  analytics         AnalyticsEvent[]
+  auditLogs         AuditLog[]
+  branches          Branch[]
+  categories        Category[]
+  customerFavorites CustomerFavoriteRestaurant[]
+  orders            Order[]
+  products          Product[]
+  members           RestaurantMember[]
+  settings          Setting?
+  subscriptions     Subscription[]
+}
+
+model Branch {
+  id           String        @id @default(cuid())
+  name         String
+  address      String
+  mapUrl       String?
+  phone        String?
+  isActive     Boolean       @default(true)
+  restaurantId String
+  createdAt    DateTime      @default(now())
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  workingHours WorkingHour[]
+
+  @@index([restaurantId, isActive])
+}
+
+model WorkingHour {
+  id        String  @id @default(cuid())
+  dayOfWeek Int
+  opensAt   String?
+  closesAt  String?
+  isClosed  Boolean @default(false)
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, dayOfWeek])
+}
+
+model Category {
+  id           String     @id @default(cuid())
+  name         String
+  nameAr       String?
+  description  String?
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  products     Product[]
+
+  @@index([restaurantId, sortOrder])
+}
+
+model Product {
+  id                String                    @id @default(cuid())
+  name              String
+  nameAr            String?
+  description       String?
+  descriptionAr     String?
+  price             Decimal                   @db.Decimal(10, 2)
+  isAvailable       Boolean                   @default(true)
+  isFeatured        Boolean                   @default(false)
+  sortOrder         Int                       @default(0)
+  restaurantId      String
+  categoryId        String
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  stock             Int?
+  customerFavorites CustomerFavoriteProduct[]
+  extras            Extra[]
+  orderItems        OrderItem[]
+  category          Category                  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  restaurant        Restaurant                @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  images            ProductImage[]
+
+  @@index([restaurantId, categoryId])
+  @@index([categoryId, sortOrder])
+  @@index([restaurantId, isAvailable, sortOrder])
+  @@index([restaurantId, stock])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  url       String
+  publicId  String?
+  alt       String?
+  sortOrder Int     @default(0)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, sortOrder])
+}
+
+model Extra {
+  id              String           @id @default(cuid())
+  name            String
+  nameAr          String?
+  price           Decimal          @db.Decimal(10, 2)
+  isAvailable     Boolean          @default(true)
+  productId       String
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItemExtras OrderItemExtra[]
+
+  @@index([productId, isAvailable])
+}
+
+model Order {
+  id              String         @id @default(cuid())
+  orderNumber     String         @unique
+  customerName    String
+  customerPhone   String
+  deliveryAddress String?
+  notes           String?
+  subtotal        Decimal        @db.Decimal(10, 2)
+  total           Decimal        @db.Decimal(10, 2)
+  status          OrderStatus    @default(PENDING)
+  restaurantId    String
+  branchId        String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  accessToken     String         @unique
+  customerUserId  String?
+  branch          Branch?        @relation(fields: [branchId], references: [id])
+  customer        User?          @relation("CustomerOrders", fields: [customerUserId], references: [id], map: "Order_customerId_fkey")
+  restaurant      Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  messages        OrderMessage[]
+
+  @@index([restaurantId, createdAt])
+  @@index([customerUserId, createdAt])
+  @@index([restaurantId, status, createdAt])
+}
+
+model OrderMessage {
+  id        String   @id @default(cuid())
+  body      String
+  sender    Role
+  orderId   String
+  userId    String?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([orderId, createdAt])
+}
+
+model OrderItem {
+  id          String           @id @default(cuid())
+  productName String
+  unitPrice   Decimal          @db.Decimal(10, 2)
+  quantity    Int
+  notes       String?
+  orderId     String
+  productId   String?
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product?         @relation(fields: [productId], references: [id])
+  extras      OrderItemExtra[]
+
+  @@index([orderId])
+}
+
+model OrderItemExtra {
+  id          String    @id @default(cuid())
+  name        String
+  price       Decimal   @db.Decimal(10, 2)
+  orderItemId String
+  extraId     String?
+  extra       Extra?    @relation(fields: [extraId], references: [id])
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+}
+
+model Plan {
+  id               String          @id @default(cuid())
+  name             String          @unique
+  price            Decimal         @db.Decimal(10, 2)
+  interval         BillingInterval @default(MONTHLY)
+  maxProducts      Int
+  maxBranches      Int
+  maxStaff         Int
+  analyticsEnabled Boolean         @default(false)
+  customDomain     Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  subscriptions    Subscription[]
+}
+
+model Subscription {
+  id           String             @id @default(cuid())
+  status       SubscriptionStatus @default(TRIALING)
+  startsAt     DateTime           @default(now())
+  endsAt       DateTime?
+  restaurantId String
+  planId       String
+  createdAt    DateTime           @default(now())
+  payments     Payment[]
+  plan         Plan               @relation(fields: [planId], references: [id])
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("EGP")
+  status         PaymentStatus @default(PENDING)
+  provider       String?
+  reference      String?       @unique
+  subscriptionId String
+  createdAt      DateTime      @default(now())
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+}
+
+model Setting {
+  id                    String     @id @default(cuid())
+  taxRate               Decimal    @default(0) @db.Decimal(5, 2)
+  deliveryFee           Decimal    @default(0) @db.Decimal(10, 2)
+  minimumOrder          Decimal    @default(0) @db.Decimal(10, 2)
+  allowOrdering         Boolean    @default(true)
+  restaurantId          String     @unique
+  estimatedOrderMinutes Int        @default(30)
+  restaurant            Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsEvent {
+  id           String     @id @default(cuid())
+  type         String
+  productId    String?
+  metadata     Json?
+  ipHash       String?
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, type, createdAt])
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  action       String
+  entity       String
+  entityId     String?
+  metadata     Json?
+  ipAddress    String?
+  userId       String?
+  restaurantId String?
+  createdAt    DateTime    @default(now())
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user         User?       @relation(fields: [userId], references: [id])
+
+  @@index([restaurantId, createdAt])
+}
+
 enum Role {
   SUPER_ADMIN
-  OWNER
+  RESTAURANT_OWNER
   STAFF
   CUSTOMER
 }
@@ -41,306 +431,4 @@ enum PaymentStatus {
 enum BillingInterval {
   MONTHLY
   YEARLY
-}
-
-model User {
-  id                 String               @id @default(cuid())
-  name               String
-  email              String               @unique
-  passwordHash       String
-  role               Role                 @default(OWNER)
-  emailVerified      DateTime?
-  image              String?
-  phone              String?
-  restaurantId       String?
-  restaurant         Restaurant?          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  ownedRestaurants   Restaurant[]         @relation("Owner")
-  verificationTokens VerificationToken[]
-  resetTokens        PasswordResetToken[]
-  auditLogs          AuditLog[]
-  customerOrders     Order[]              @relation("CustomerOrders")
-  orderMessages      OrderMessage[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-
-  @@index([restaurantId])
-}
-
-model VerificationToken {
-  id      String   @id @default(cuid())
-  token   String   @unique
-  expires DateTime
-  userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model PasswordResetToken {
-  id      String   @id @default(cuid())
-  token   String   @unique
-  expires DateTime
-  userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Restaurant {
-  id            String           @id @default(cuid())
-  name          String
-  nameAr        String?
-  slug          String           @unique
-  description   String?
-  descriptionAr String?
-  email         String?
-  phone         String?
-  whatsapp      String
-  address       String?
-  mapUrl        String?
-  facebookUrl   String?
-  instagramUrl  String?
-  logoUrl       String?
-  coverUrl      String?
-  primaryColor  String           @default("#e85d2a")
-  accentColor   String           @default("#f6c453")
-  currency      String           @default("EGP")
-  locale        String           @default("en")
-  isActive      Boolean          @default(true)
-  ownerId       String
-  owner         User             @relation("Owner", fields: [ownerId], references: [id])
-  staff         User[]
-  branches      Branch[]
-  categories    Category[]
-  products      Product[]
-  orders        Order[]
-  subscriptions Subscription[]
-  settings      Setting?
-  analytics     AnalyticsEvent[]
-  auditLogs     AuditLog[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-}
-
-model Branch {
-  id           String        @id @default(cuid())
-  name         String
-  address      String
-  mapUrl       String?
-  phone        String?
-  isActive     Boolean       @default(true)
-  restaurantId String
-  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  workingHours WorkingHour[]
-  orders       Order[]
-  createdAt    DateTime      @default(now())
-}
-
-model WorkingHour {
-  id        String  @id @default(cuid())
-  dayOfWeek Int
-  opensAt   String?
-  closesAt  String?
-  isClosed  Boolean @default(false)
-  branchId  String
-  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
-  @@unique([branchId, dayOfWeek])
-}
-
-model Category {
-  id           String     @id @default(cuid())
-  name         String
-  nameAr       String?
-  description  String?
-  sortOrder    Int        @default(0)
-  isActive     Boolean    @default(true)
-  restaurantId String
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  products     Product[]
-  createdAt    DateTime   @default(now())
-
-  @@index([restaurantId, sortOrder])
-}
-
-model Product {
-  id            String         @id @default(cuid())
-  name          String
-  nameAr        String?
-  description   String?
-  descriptionAr String?
-  price         Decimal        @db.Decimal(10, 2)
-  isAvailable   Boolean        @default(true)
-  isFeatured    Boolean        @default(false)
-  sortOrder     Int            @default(0)
-  stock         Int?
-  restaurantId  String
-  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  categoryId    String
-  category      Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  images        ProductImage[]
-  extras        Extra[]
-  orderItems    OrderItem[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  @@index([restaurantId, categoryId])
-}
-
-model ProductImage {
-  id        String  @id @default(cuid())
-  url       String
-  publicId  String?
-  alt       String?
-  sortOrder Int     @default(0)
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-}
-
-model Extra {
-  id              String           @id @default(cuid())
-  name            String
-  nameAr          String?
-  price           Decimal          @db.Decimal(10, 2)
-  isAvailable     Boolean          @default(true)
-  productId       String
-  product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderItemExtras OrderItemExtra[]
-}
-
-model Order {
-  id              String      @id @default(cuid())
-  orderNumber     String      @unique
-  customerName    String
-  customerPhone   String
-  deliveryAddress String?
-  notes           String?
-  subtotal        Decimal     @db.Decimal(10, 2)
-  total           Decimal     @db.Decimal(10, 2)
-  status          OrderStatus @default(PENDING)
-  accessToken     String      @unique
-  customerId      String?
-  customer        User?       @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: SetNull)
-  restaurantId    String
-  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  branchId        String?
-  branch          Branch?     @relation(fields: [branchId], references: [id])
-  items           OrderItem[]
-  messages        OrderMessage[]
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  @@index([restaurantId, createdAt])
-  @@index([customerId, createdAt])
-}
-
-model OrderMessage {
-  id        String   @id @default(cuid())
-  body      String
-  sender    Role
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-
-  @@index([orderId, createdAt])
-}
-
-model OrderItem {
-  id          String           @id @default(cuid())
-  productName String
-  unitPrice   Decimal          @db.Decimal(10, 2)
-  quantity    Int
-  notes       String?
-  orderId     String
-  order       Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId   String?
-  product     Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
-  extras      OrderItemExtra[]
-}
-
-model OrderItemExtra {
-  id          String    @id @default(cuid())
-  name        String
-  price       Decimal   @db.Decimal(10, 2)
-  orderItemId String
-  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  extraId     String?
-  extra       Extra?    @relation(fields: [extraId], references: [id], onDelete: SetNull)
-}
-
-model Plan {
-  id               String          @id @default(cuid())
-  name             String          @unique
-  price            Decimal         @db.Decimal(10, 2)
-  interval         BillingInterval @default(MONTHLY)
-  maxProducts      Int
-  maxBranches      Int
-  maxStaff         Int
-  analyticsEnabled Boolean         @default(false)
-  customDomain     Boolean         @default(false)
-  subscriptions    Subscription[]
-  createdAt        DateTime        @default(now())
-}
-
-model Subscription {
-  id           String             @id @default(cuid())
-  status       SubscriptionStatus @default(TRIALING)
-  startsAt     DateTime           @default(now())
-  endsAt       DateTime?
-  restaurantId String
-  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  planId       String
-  plan         Plan               @relation(fields: [planId], references: [id])
-  payments     Payment[]
-  createdAt    DateTime           @default(now())
-}
-
-model Payment {
-  id             String        @id @default(cuid())
-  amount         Decimal       @db.Decimal(10, 2)
-  currency       String        @default("EGP")
-  status         PaymentStatus @default(PENDING)
-  provider       String?
-  reference      String?       @unique
-  subscriptionId String
-  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  createdAt      DateTime      @default(now())
-}
-
-model Setting {
-  id            String     @id @default(cuid())
-  taxRate       Decimal    @default(0) @db.Decimal(5, 2)
-  deliveryFee   Decimal    @default(0) @db.Decimal(10, 2)
-  minimumOrder  Decimal    @default(0) @db.Decimal(10, 2)
-  allowOrdering Boolean    @default(true)
-  estimatedOrderMinutes Int @default(30)
-  restaurantId  String     @unique
-  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-}
-
-model AnalyticsEvent {
-  id           String     @id @default(cuid())
-  type         String
-  productId    String?
-  metadata     Json?
-  ipHash       String?
-  restaurantId String
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  createdAt    DateTime   @default(now())
-
-  @@index([restaurantId, type, createdAt])
-}
-
-model AuditLog {
-  id           String      @id @default(cuid())
-  action       String
-  entity       String
-  entityId     String?
-  metadata     Json?
-  ipAddress    String?
-  userId       String?
-  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  restaurantId String?
-  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  createdAt    DateTime    @default(now())
-
-  @@index([restaurantId, createdAt])
 }

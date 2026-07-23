@@ -1,0 +1,8 @@
+import Link from "next/link";
+import { revalidatePath } from "next/cache";
+import { getLocale, getTranslations } from "next-intl/server";
+import { prisma } from "@/lib/prisma";
+import { requireCustomer } from "@/lib/customer";
+
+export const dynamic="force-dynamic";
+export default async function FavoriteProducts(){const {customerId}=await requireCustomer();const [t,locale,items]=await Promise.all([getTranslations("customerAccount.favorites"),getLocale(),prisma.customerFavoriteProduct.findMany({where:{customerId},orderBy:{createdAt:"desc"},select:{product:{select:{id:true,name:true,nameAr:true,price:true,restaurant:{select:{slug:true,currency:true}}}}}})]);async function remove(form:FormData){"use server";const {customerId}=await requireCustomer();await prisma.customerFavoriteProduct.deleteMany({where:{customerId,productId:String(form.get("id"))}});revalidatePath("/account/favorites/products");}return <section className="customer-main"><header><h1>{t("productsTitle")}</h1></header><div className="customer-card-grid">{items.length?items.map(({product})=><article key={product.id}><h2>{locale==="ar"&&product.nameAr?product.nameAr:product.name}</h2><strong>{new Intl.NumberFormat(locale,{style:"currency",currency:product.restaurant.currency}).format(Number(product.price))}</strong><div><Link className="button primary" href={`/menu/${product.restaurant.slug}/product/${product.id}`}>{t("openMenu")}</Link><form action={remove}><input type="hidden" name="id" value={product.id}/><button className="button ghost">{t("remove")}</button></form></div></article>):<p>{t("emptyProducts")}</p>}</div></section>}

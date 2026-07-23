@@ -56,9 +56,9 @@ export default async function OrderTrackingPage({
   if (!order) notFound();
   const isRestaurant = Boolean(
     session?.user.restaurantId === order.restaurantId &&
-    ["OWNER", "STAFF", "SUPER_ADMIN"].includes(session.user.role),
+    session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)),
   );
-  const isLinkedCustomer = session?.user.id === order.customerId;
+  const isLinkedCustomer = session?.user.id === order.customerUserId;
   const restaurantName =
     locale === "ar" && order.restaurant.nameAr
       ? order.restaurant.nameAr
@@ -81,7 +81,7 @@ export default async function OrderTrackingPage({
     const current = await auth();
     const currentOrder = await prisma.order.findUnique({
       where: { accessToken: token },
-      select: { id: true, restaurantId: true, customerId: true },
+      select: { id: true, restaurantId: true, customerUserId: true },
     });
     if (!currentOrder) return;
     const body = String(form.get("body") ?? "")
@@ -90,9 +90,9 @@ export default async function OrderTrackingPage({
     if (!body) return;
     const restaurantSender = Boolean(
       current?.user.restaurantId === currentOrder.restaurantId &&
-      ["OWNER", "STAFF", "SUPER_ADMIN"].includes(current.user.role),
+      current.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)),
     );
-    const linkedCustomer = current?.user.id === currentOrder.customerId;
+    const linkedCustomer = current?.user.id === currentOrder.customerUserId;
     await prisma.orderMessage.create({
       data: {
         orderId: currentOrder.id,
@@ -117,13 +117,13 @@ export default async function OrderTrackingPage({
       where: { accessToken: token },
       select: {
         id: true,
-        customerId: true,
+        customerUserId: true,
         customerName: true,
         customerPhone: true,
       },
     });
     if (!currentOrder) notFound();
-    if (currentOrder.customerId) redirect(`/order/${token}`);
+    if (currentOrder.customerUserId) redirect(`/order/${token}`);
     try {
       await prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -132,12 +132,13 @@ export default async function OrderTrackingPage({
             phone: currentOrder.customerPhone,
             email: parsed.data.email,
             passwordHash: await hash(parsed.data.password, 12),
-            role: "CUSTOMER",
+            roles: { create: { role: "CUSTOMER" } },
+            customerProfile: { create: {} },
           },
         });
         await tx.order.update({
           where: { id: currentOrder.id },
-          data: { customerId: user.id },
+          data: { customerUserId: user.id },
         });
       });
     } catch {
@@ -282,7 +283,7 @@ export default async function OrderTrackingPage({
                 </a>
               )}
             </article>
-            {!order.customerId && !isRestaurant && (
+            {!order.customerUserId && !isRestaurant && (
               <article className="order-card">
                 <h2>{t("createAccount")}</h2>
                 <p>{t("accountHelp")}</p>

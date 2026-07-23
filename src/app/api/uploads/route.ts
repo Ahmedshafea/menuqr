@@ -15,7 +15,7 @@ function isBucket(value: string): value is StorageBucket {
 function tenant(session: Session | null) {
   if (
     !session?.user ||
-    !["OWNER", "STAFF", "SUPER_ADMIN"].includes(session.user.role)
+    !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role))
   )
     return null;
   return session.user.restaurantId;

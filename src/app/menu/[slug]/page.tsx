@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { MenuClient } from "@/components/menu-client";
 import { isRestaurantOpen } from "@/lib/restaurant-hours";
 import { RestaurantQr } from "@/components/restaurant-qr";
+import { FavoriteRestaurantButton } from "@/components/favorite-buttons";
+import { auth } from "@/auth";
 export const revalidate = 60;
 const getRestaurant = unstable_cache(
   async (slug: string) =>
@@ -55,8 +57,10 @@ export async function generateMetadata({
 }
 export default async function MenuPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ reorder?: string }>;
 }) {
   const [restaurant, t, qr, locale] = await Promise.all([
     getRestaurant((await params).slug),
@@ -90,6 +94,11 @@ export default async function MenuPage({
       price: Number(extra.price),
     })),
   }));
+  const reorder = (await searchParams).reorder ?? "";
+  const availableIds = new Set(products.map((product) => product.id));
+  const initialCart = Object.fromEntries(reorder.split(",").map((part) => part.split(":" as const)).filter(([id,quantity]) => availableIds.has(id) && Number.isInteger(Number(quantity)) && Number(quantity) > 0).map(([id,quantity]) => [id, Math.min(99, Number(quantity))]));
+  const session = await auth();
+  const customerDefaults = session?.user.roles.includes("CUSTOMER") ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, phone: true, customerProfile: { select: { addresses: { where: { isDefault: true }, take: 1, select: { address: true } } } } } }) : null;
   const address = restaurant.address || branch?.address;
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}`;
   return (
@@ -116,6 +125,7 @@ export default async function MenuPage({
             )}
             {name}
           </span>
+          <FavoriteRestaurantButton restaurantId={restaurant.id} slug={restaurant.slug} />
           <span className={`open-pill ${accepting ? "" : "closed-pill"}`}>
             {accepting
               ? t("acceptingOrders")
@@ -206,6 +216,8 @@ export default async function MenuPage({
           }}
           products={products}
           orderingEnabled={accepting}
+          initialCart={initialCart}
+          customerDefaults={customerDefaults ? { name: customerDefaults.name, phone: customerDefaults.phone ?? "", address: customerDefaults.customerProfile?.addresses[0]?.address ?? "" } : undefined}
         />
       </section>
       <footer className="menu-footer">{t("powered")}</footer>

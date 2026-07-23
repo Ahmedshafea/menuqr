@@ -57,7 +57,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       setError(t("incorrect"));
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push("/auth/continue");
     }
   }
 

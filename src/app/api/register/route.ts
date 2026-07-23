@@ -1,4 +1,4 @@
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validators";
 import { getTranslations } from "next-intl/server";
@@ -46,27 +46,23 @@ export async function POST(request: Request) {
   }
   const data = parsed.data;
   try {
+    const existing = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true, passwordHash: true } });
+    if (existing && !(await compare(data.password, existing.passwordHash)))
+      return apiError("ACCOUNT_EXISTS", 409);
     const user = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name: data.name,
-          email: data.email,
-          passwordHash: await hash(data.password, 12),
-          role: "OWNER",
-        },
-      });
-      const restaurant = await tx.restaurant.create({
+      const user = existing
+        ? await tx.user.update({ where: { id: existing.id }, data: { roles: { connectOrCreate: { where: { userId_role: { userId: existing.id, role: "RESTAURANT_OWNER" } }, create: { role: "RESTAURANT_OWNER" } } } } })
+        : await tx.user.create({ data: { name: data.name, email: data.email, passwordHash: await hash(data.password, 12), roles: { create: { role: "RESTAURANT_OWNER" } } } });
+      await tx.restaurant.create({
         data: {
           name: data.restaurantName,
           slug: data.slug,
           whatsapp: data.whatsapp,
-          ownerId: user.id,
+          members: {
+            create: { userId: user.id, role: "RESTAURANT_OWNER" },
+          },
           settings: { create: {} },
         },
-      });
-      await tx.user.update({
-        where: { id: user.id },
-        data: { restaurantId: restaurant.id },
       });
       return user;
     });
