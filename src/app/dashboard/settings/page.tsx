@@ -5,13 +5,19 @@ import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { RestaurantQr } from "@/components/restaurant-qr";
+import { redirect } from "next/navigation";
+import { NotificationPreferences } from "@/components/notification-preferences";
 export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const { restaurantId } = await requireTenant();
-  const [t, common, qr, restaurant] = await Promise.all([
+  const [t, common, qr, polish, mvp, notifications, fulfillment, restaurant] = await Promise.all([
     getTranslations("settings"),
     getTranslations("common"),
     getTranslations("qr"),
+    getTranslations("launchPolish.settings"),
+    getTranslations("mvpPolish.qr"),
+    getTranslations("mvpPolish.notifications"),
+    getTranslations("restaurantWorkflow.settings"),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
       include: {
@@ -102,17 +108,25 @@ export default async function SettingsPage() {
         create: {
           restaurantId,
           allowOrdering: form.get("allowOrdering") === "on",
+          allowOrdersOutsideHours: form.get("allowOrdersOutsideHours") === "on",
           estimatedOrderMinutes: Math.max(
             1,
             Number(form.get("estimatedOrderMinutes")) || 30,
           ),
+          offersDelivery: form.get("offersDelivery") === "on",
+          offersPickup: form.get("offersPickup") === "on",
+          offersDineIn: form.get("offersDineIn") === "on",
         },
         update: {
           allowOrdering: form.get("allowOrdering") === "on",
+          allowOrdersOutsideHours: form.get("allowOrdersOutsideHours") === "on",
           estimatedOrderMinutes: Math.max(
             1,
             Number(form.get("estimatedOrderMinutes")) || 30,
           ),
+          offersDelivery: form.get("offersDelivery") === "on",
+          offersPickup: form.get("offersPickup") === "on",
+          offersDineIn: form.get("offersDineIn") === "on",
         },
       });
     });
@@ -120,6 +134,7 @@ export default async function SettingsPage() {
     revalidatePath("/dashboard/profile");
     revalidatePath("/menu", "layout");
     revalidateTag("public-menu");
+    redirect("/dashboard/settings?toast=settingsUpdated");
   }
   return (
     <section className="dash-main">
@@ -247,6 +262,11 @@ export default async function SettingsPage() {
               />
               {t("acceptOrders")}
             </label>
+            <fieldset className="full fulfillment-settings"><legend>{fulfillment("fulfillment")}</legend><label className="check-label"><input name="offersDelivery" type="checkbox" defaultChecked={restaurant.settings?.offersDelivery??true}/>{fulfillment("delivery")}</label><label className="check-label"><input name="offersPickup" type="checkbox" defaultChecked={restaurant.settings?.offersPickup??true}/>{fulfillment("pickup")}</label><label className="check-label"><input name="offersDineIn" type="checkbox" defaultChecked={restaurant.settings?.offersDineIn??false}/>{fulfillment("dineIn")}</label></fieldset>
+            <label className="check-label">
+              <input name="allowOrdersOutsideHours" type="checkbox" defaultChecked={restaurant.settings?.allowOrdersOutsideHours ?? false} />
+              <span>{polish("outsideHours")}<small>{polish("outsideHoursHelp")}</small></span>
+            </label>
             <label>
               {t("estimatedMinutes")}
               <input
@@ -313,7 +333,11 @@ export default async function SettingsPage() {
             })}
           </div>
         </div>
-        <div className="settings-section qr-settings-section">
+        <div className="settings-section">
+          <h2>{notifications("title")}</h2>
+          <NotificationPreferences labels={{browser:notifications("browser"),sound:notifications("sound"),help:notifications("preferencesHelp")}} />
+        </div>
+        <div className="settings-section qr-settings-section" id="restaurant-qr">
           <h2>{qr("sectionTitle")}</h2>
           <p>{qr("sectionHelp")}</p>
           <RestaurantQr
@@ -325,8 +349,11 @@ export default async function SettingsPage() {
               svg: qr("downloadSvg"),
               copy: qr("copyLink"),
               copied: qr("copied"),
+              printA4: mvp("printA4"),
+              printCards: mvp("printCards"),
             }}
           />
+          <small>{mvp("futureTables")}</small>
         </div>
         <button className="button primary">
           <Save />

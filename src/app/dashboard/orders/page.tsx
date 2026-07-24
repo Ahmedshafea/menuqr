@@ -4,14 +4,20 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import type { OrderStatus, Prisma } from "@prisma/client";
+import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 const statuses = [
-  "PENDING",
+  "NEW",
   "CONFIRMED",
   "PREPARING",
   "READY",
+  "ASSIGNED_TO_DRIVER",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
   "COMPLETED",
   "CANCELLED",
+  "REJECTED",
+  "FAILED_DELIVERY",
 ] as const;
 export default async function OrdersPage({
   searchParams,
@@ -43,9 +49,11 @@ export default async function OrdersPage({
         }
       : {}),
   };
-  const [t, common, locale, restaurant, orders, total] = await Promise.all([
+  const [t, common, flow, empty, locale, restaurant, orders, total] = await Promise.all([
     getTranslations("orders"),
     getTranslations("common"),
+    getTranslations("launchPolish.orders"),
+    getTranslations("mvpPolish.empty"),
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
@@ -62,17 +70,17 @@ export default async function OrdersPage({
   ]);
   async function updateStatus(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId, session } = await requireTenant();
     const id = String(form.get("id"));
     const accessToken = String(form.get("accessToken") ?? "");
     const next = String(form.get("status")) as OrderStatus;
     if (!statuses.includes(next)) return;
-    await prisma.order.updateMany({
-      where: { id, restaurantId },
-      data: { status: next },
-    });
+    const order = await prisma.order.findFirst({ where: { id, restaurantId }, select: { id: true,driverId:true } });
+    if (!order||next==="ASSIGNED_TO_DRIVER"&&!order.driverId) return;
+    await prisma.$transaction(async tx=>{await tx.order.update({ where: { id }, data: { status: next,...(next==="OUT_FOR_DELIVERY"?{outForDeliveryAt:new Date()} :{}),...(next==="DELIVERED"||next==="COMPLETED"?{deliveredAt:new Date()}: {}) } });await tx.orderStatusHistory.create({ data: { orderId: id, status: next, userId: session.user.id } });await tx.orderActionLog.create({ data: { orderId: id, userId: session.user.id, action: "STATUS_UPDATED", details: { status: next } } });if(order.driverId&&(next==="DELIVERED"||next==="COMPLETED"||next==="FAILED_DELIVERY"))await tx.deliveryDriver.update({where:{id:order.driverId},data:{status:"AVAILABLE"}});if(next==="DELIVERED")await tx.restaurantNotification.create({data:{restaurantId,type:"DELIVERY_COMPLETED",title:"Delivery completed",href:`/order/${accessToken}`}})});
     revalidatePath("/dashboard/orders");
     if (accessToken) revalidatePath(`/order/${accessToken}`);
+    redirect("/dashboard/orders?toast=orderStatusChanged");
   }
   const money = (value: number) =>
     new Intl.NumberFormat(locale, {
@@ -96,7 +104,7 @@ export default async function OrdersPage({
           <select name="status" defaultValue={status ?? ""}>
             <option value="">{t("allStatuses")}</option>
             {statuses.map((value) => (
-              <option key={value}>{value}</option>
+              <option key={value} value={value}>{flow(`statuses.${value}`)}</option>
             ))}
           </select>
           <button className="button ghost">{common("search")}</button>
@@ -107,6 +115,7 @@ export default async function OrdersPage({
               <tr>
                 <th>{t("order")}</th>
                 <th>{t("customer")}</th>
+                <th>{t("phone")}</th>
                 <th>{t("items")}</th>
                 <th>{t("total")}</th>
                 <th>{t("status")}</th>
@@ -123,7 +132,9 @@ export default async function OrdersPage({
                   </td>
                   <td>
                     {order.customerName}
-                    <small>{order.customerPhone}</small>
+                                      </td>
+                  <td>
+                    {order.customerPhone}
                   </td>
                   <td>{order._count.items}</td>
                   <td>{money(Number(order.total))}</td>
@@ -137,7 +148,7 @@ export default async function OrdersPage({
                       />
                       <select name="status" defaultValue={order.status}>
                         {statuses.map((value) => (
-                          <option key={value}>{value}</option>
+                          <option key={value} value={value}>{flow(`statuses.${value}`)}</option>
                         ))}
                       </select>
                       <button>{common("save")}</button>
@@ -153,7 +164,7 @@ export default async function OrdersPage({
             </tbody>
           </table>
         ) : (
-          <p>{t("noOrders")}</p>
+          <div className="friendly-empty"><h2>{empty("ordersTitle")}</h2><p>{empty("ordersHelp")}</p></div>
         )}
         <div className="pagination">
           {page > 1 && <a href={`?page=${page - 1}`}>{common("previous")}</a>}

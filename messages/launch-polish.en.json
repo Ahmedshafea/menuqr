@@ -1,0 +1,55 @@
+{
+  "navigation": { "myAccount": "My Account", "restaurantDashboard": "Restaurant Dashboard" },
+  "settings": {
+    "outsideHours": "Allow orders outside working hours",
+    "outsideHoursHelp": "When disabled, guests can browse the menu but cannot check out while the restaurant is closed."
+  },
+  "closed": {
+    "title": "The restaurant is not accepting orders right now.",
+    "hours": "Today's working hours: {hours}",
+    "noHours": "The restaurant is closed today.",
+    "help": "You can browse the menu and return during working hours."
+  },
+  "orders": {
+    "manage": "Manage order",
+    "timeline": "Order timeline",
+    "actionLog": "Action log",
+    "increase": "Increase quantity",
+    "decrease": "Decrease quantity",
+    "remove": "Remove product",
+    "replace": "Replace product",
+    "replaceWith": "Replace with",
+    "complimentary": "Add complimentary item",
+    "addNotes": "Save notes",
+    "itemNotes": "Item notes",
+    "sendApproval": "Send Approval Request",
+    "newTotal": "New total",
+    "approvalGreeting": "Hello.",
+    "approvalIntro": "Your order was updated. Please review the order and its new total using this link:",
+    "approvalReply": "Please reply with ✅ Approved or ❌ Cancel order.",
+    "actions": {
+      "QUANTITY_INCREASED": "increased product quantity",
+      "QUANTITY_DECREASED": "decreased product quantity",
+      "ITEM_REMOVED": "removed a product",
+      "ITEM_REPLACED": "replaced a product",
+      "COMPLIMENTARY_ADDED": "added a complimentary item",
+      "ITEM_NOTES_UPDATED": "updated item notes",
+      "TOTAL_CHANGED": "updated the order total",
+      "APPROVAL_SENT": "sent a WhatsApp approval request",
+      "STATUS_UPDATED": "updated the order status"
+    },
+    "statuses": {
+      "NEW": "New order",
+      "CONFIRMED": "Confirmed",
+      "PREPARING": "Preparing",
+      "READY": "Ready for pickup",
+      "ASSIGNED_TO_DRIVER": "Assigned to driver",
+      "OUT_FOR_DELIVERY": "Out for delivery",
+      "DELIVERED": "Delivered",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled",
+      "REJECTED": "Rejected",
+      "FAILED_DELIVERY": "Failed delivery"
+    }
+  }
+}

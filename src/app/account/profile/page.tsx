@@ -29,7 +29,7 @@ export default async function CustomerProfilePage({
     const language = String(form.get("language")) === "en" ? "en" : "ar";
     if (name.length < 2) return;
     await prisma.user.update({ where: { id: session.user.id }, data: { name, phone: phone || null, language } });
-    redirect("/account/profile?saved=1");
+    redirect("/account/profile?saved=1&toast=profileUpdated");
   }
 
   async function changePassword(form: FormData) {

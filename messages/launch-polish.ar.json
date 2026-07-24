@@ -1,0 +1,55 @@
+{
+  "navigation": { "myAccount": "حسابي", "restaurantDashboard": "لوحة المطعم" },
+  "settings": {
+    "outsideHours": "السماح بالطلبات خارج ساعات العمل",
+    "outsideHoursHelp": "عند إيقاف هذا الخيار، يمكن للعميل تصفح المنيو لكن لن يستطيع إتمام الطلب أثناء إغلاق المطعم."
+  },
+  "closed": {
+    "title": "المطعم لا يستقبل الطلبات حاليًا.",
+    "hours": "ساعات العمل اليوم: {hours}",
+    "noHours": "المطعم مغلق اليوم.",
+    "help": "يمكنك تصفح القائمة والعودة أثناء أوقات العمل."
+  },
+  "orders": {
+    "manage": "إدارة الطلب",
+    "timeline": "مراحل الطلب",
+    "actionLog": "سجل الإجراءات",
+    "increase": "زيادة الكمية",
+    "decrease": "تقليل الكمية",
+    "remove": "إزالة المنتج",
+    "replace": "استبدال المنتج",
+    "replaceWith": "استبداله بـ",
+    "complimentary": "إضافة منتج مجاني",
+    "addNotes": "حفظ الملاحظات",
+    "itemNotes": "ملاحظات العنصر",
+    "sendApproval": "إرسال طلب الموافقة",
+    "newTotal": "الإجمالي الجديد",
+    "approvalGreeting": "السلام عليكم.",
+    "approvalIntro": "تم تعديل طلبكم. يرجى مراجعة الطلب والإجمالي الجديد عبر الرابط التالي:",
+    "approvalReply": "يرجى الرد بـ ✅ موافق أو ❌ إلغاء الطلب.",
+    "actions": {
+      "QUANTITY_INCREASED": "زاد كمية المنتج",
+      "QUANTITY_DECREASED": "قلّل كمية المنتج",
+      "ITEM_REMOVED": "أزال منتجًا",
+      "ITEM_REPLACED": "استبدل منتجًا",
+      "COMPLIMENTARY_ADDED": "أضاف منتجًا مجانيًا",
+      "ITEM_NOTES_UPDATED": "حدّث ملاحظات المنتج",
+      "TOTAL_CHANGED": "حدّث إجمالي الطلب",
+      "APPROVAL_SENT": "أرسل طلب موافقة عبر واتساب",
+      "STATUS_UPDATED": "حدّث حالة الطلب"
+    },
+    "statuses": {
+      "NEW": "طلب جديد",
+      "CONFIRMED": "تم التأكيد",
+      "PREPARING": "جاري التحضير",
+      "READY": "جاهز للاستلام",
+      "ASSIGNED_TO_DRIVER": "تم تعيين سائق",
+      "OUT_FOR_DELIVERY": "خرج للتوصيل",
+      "DELIVERED": "تم التسليم",
+      "COMPLETED": "مكتمل",
+      "CANCELLED": "ملغي",
+      "REJECTED": "مرفوض",
+      "FAILED_DELIVERY": "تعذر التسليم"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "close": "إغلاق",
+  "productCreated": "تم حفظ المنتج بنجاح.",
+  "productUpdated": "تم تحديث المنتج بنجاح.",
+  "productDeleted": "تم حذف المنتج بنجاح.",
+  "categorySaved": "تم حفظ القسم بنجاح.",
+  "extraSaved": "تم حفظ الإضافة بنجاح.",
+  "settingsUpdated": "تم تحديث إعدادات ومعلومات المطعم.",
+  "hoursUpdated": "تم تحديث ساعات العمل.",
+  "qrUpdated": "تم تحديث رمز QR.",
+  "importCompleted": "اكتمل استيراد المنتجات بنجاح.",
+  "orderStatusChanged": "تم تحديث حالة الطلب.",
+  "orderUpdated": "تم تحديث الطلب وإعادة حساب الإجمالي.",
+  "profileUpdated": "تم تحديث الملف الشخصي.",
+  "imageUploaded": "تم رفع الصورة بنجاح."
+}

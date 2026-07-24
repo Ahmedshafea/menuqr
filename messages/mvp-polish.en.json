@@ -1,0 +1,54 @@
+{
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet.",
+    "markRead": "Mark all as read",
+    "browser": "Browser notifications",
+    "sound": "Short notification sound",
+    "preferencesHelp": "These preferences are stored on this device and do not use an external service."
+  },
+  "products": {
+    "available": "Available",
+    "temporary": "Unavailable temporarily",
+    "hidden": "Hidden",
+    "duplicate": "Duplicate",
+    "featured": "Featured",
+    "notFeatured": "Not featured",
+    "move": "Move",
+    "price": "Quick price",
+    "save": "Save",
+    "outOfStock": "Out of stock",
+    "emptyTitle": "No products yet.",
+    "emptyHelp": "Add your first product to start building your menu."
+  },
+  "empty": {
+    "ordersTitle": "No orders received yet.",
+    "ordersHelp": "New orders will appear here automatically.",
+    "analyticsTitle": "Analytics will appear after customers start using your menu.",
+    "analyticsHelp": "Print your QR and share your public menu to get started."
+  },
+  "setup": {
+    "title": "Finish setting up your restaurant",
+    "progress": "{done} of {total} completed",
+    "restaurant": "Restaurant information",
+    "logo": "Upload logo",
+    "category": "Add first category",
+    "product": "Add first product",
+    "whatsapp": "Configure WhatsApp",
+    "hours": "Configure working hours",
+    "qr": "Print QR",
+    "dismiss": "Dismiss"
+  },
+  "qr": {
+    "printA4": "Print A4",
+    "printCards": "Print table cards",
+    "futureTables": "Multiple table QR codes will be available later."
+  },
+  "restaurant": {
+    "open": "Open",
+    "closed": "Closed",
+    "closingSoon": "Closing soon",
+    "closingWarning": "The restaurant closes in less than 30 minutes and your order may be delayed.",
+    "estimated": "Estimated preparation time: {minutes} minutes"
+  }
+}

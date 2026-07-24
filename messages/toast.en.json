@@ -1,0 +1,16 @@
+{
+  "close": "Close",
+  "productCreated": "Product saved successfully.",
+  "productUpdated": "Product updated successfully.",
+  "productDeleted": "Product deleted successfully.",
+  "categorySaved": "Category saved successfully.",
+  "extraSaved": "Extra saved successfully.",
+  "settingsUpdated": "Restaurant information and settings updated.",
+  "hoursUpdated": "Working hours updated.",
+  "qrUpdated": "QR code updated.",
+  "importCompleted": "Product import completed successfully.",
+  "orderStatusChanged": "Order status updated.",
+  "orderUpdated": "Order updated and total recalculated.",
+  "profileUpdated": "Customer profile updated.",
+  "imageUploaded": "Image uploaded successfully."
+}

@@ -28,7 +28,15 @@ Requirements: Node.js 20+, npm, and a Supabase project.
 9. Run [supabase/storage.sql](supabase/storage.sql) once in the Supabase SQL Editor.
 10. Start the application with `npm run dev`.
 
-The sample restaurant remains available at `/menu/demo-bistro`, including without a database connection.
+Read-only live demos are available without a database connection:
+
+- `/menu/demo-bistro` — Burger Factory
+- `/menu/demo-pizza-roma` — Pizza Roma
+- `/menu/demo-al-sultan` — Al Sultan Grills
+- `/menu/demo-mazag-coffee` — Mazag Coffee
+
+Demo carts, extras, favorites, and WhatsApp previews run only in the browser.
+They never create orders, analytics events, or production database records.
 
 ## Environment variables
 

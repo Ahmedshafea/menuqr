@@ -14,9 +14,11 @@ import {
   Sparkles,
   UtensilsCrossed,
 } from "lucide-react";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { RestaurantQr } from "@/components/restaurant-qr";
+import { auth } from "@/auth";
+import { demoRestaurantCards } from "@/lib/demo-restaurants";
 
 export const revalidate = 300;
 
@@ -31,15 +33,6 @@ const foodCategories = [
   { key: "sushi", emoji: "🍣", image: "photo-1579871494447-9811cf80d66c" },
 ] as const;
 
-const restaurants = [
-  { key: "burgerHouse", image: "photo-1550547660-d9450f859349", logo: "BH" },
-  { key: "pizzaNapoli", image: "photo-1579751626657-72bc17010498", logo: "PN" },
-  { key: "coffeeCorner", image: "photo-1445116572660-236099ec97a0", logo: "CC" },
-  { key: "sweetCake", image: "photo-1551024506-0bccd828d307", logo: "SC" },
-  { key: "chickenGrill", image: "photo-1532550907401-a500c9a57435", logo: "CG" },
-  { key: "sushiBox", image: "photo-1579871494447-9811cf80d66c", logo: "SB" },
-] as const;
-
 const featureIcons = [ImageIcon, MessageCircle, PencilLine, Smartphone];
 const benefitIcons = [Printer, Clock3, MessageCircle, QrCode, Sparkles, Smartphone];
 
@@ -48,9 +41,13 @@ function unsplash(id: string, width = 800) {
 }
 
 export default async function Home() {
-  const [t, nav] = await Promise.all([
+  const [t, nav, accountNav, demoText, locale, session] = await Promise.all([
     getTranslations("landingV2"),
     getTranslations("nav"),
+    getTranslations("launchPolish.navigation"),
+    getTranslations("demo"),
+    getLocale(),
+    auth(),
   ]);
   const demoUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/demo-bistro`;
 
@@ -70,8 +67,7 @@ export default async function Home() {
         </div>
         <div className="nav-actions">
           <LanguageSwitcher compact />
-          <Link href="/login" className="button ghost">{nav("signIn")}</Link>
-          <Link href="/register" className="button primary">{nav("start")}</Link>
+          {session ? <Link href={session.user.restaurantId ? "/dashboard" : "/account"} className="button primary">{session.user.restaurantId ? accountNav("restaurantDashboard") : accountNav("myAccount")}</Link> : <><Link href="/login" className="button ghost">{nav("signIn")}</Link><Link href="/register" className="button primary">{nav("start")}</Link></>}
         </div>
       </nav>
 
@@ -132,6 +128,38 @@ export default async function Home() {
         </div>
       </section>
 
+      <section id="showcase" className="landing-section live-demo-section wrap">
+        <div className="landing-heading centered">
+          <span>{demoText("sectionLabel")}</span>
+          <h2>{demoText("sectionTitle")}</h2>
+          <p>{demoText("sectionDescription")}</p>
+        </div>
+        <div className="restaurant-grid demo-restaurant-grid">
+          {demoRestaurantCards.map((restaurant) => (
+            <article className="restaurant-card" key={restaurant.slug}>
+              <Link href={`/menu/${restaurant.slug}`}>
+                <div className="restaurant-cover">
+                  <Image
+                    src={restaurant.image}
+                    alt={locale === "ar" ? restaurant.nameAr : restaurant.name}
+                    fill
+                    sizes="(max-width: 700px) 100vw, 25vw"
+                  />
+                  <span className="demo-card-badge">{demoText("badge")}</span>
+                </div>
+                <div className="restaurant-card-copy">
+                  <small>{locale === "ar" ? restaurant.cuisineAr : restaurant.cuisine}</small>
+                  <h3>{locale === "ar" ? restaurant.nameAr : restaurant.name}</h3>
+                  <p>{locale === "ar" ? restaurant.descriptionAr : restaurant.description}</p>
+                  <em>{demoText("products", { count: restaurant.productCount })}</em>
+                  <strong>{demoText("view")}<ArrowRight /></strong>
+                </div>
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section id="how" className="landing-section how-section">
         <div className="wrap">
           <div className="landing-heading centered"><span>{t("how.label")}</span><h2>{t("how.title")}</h2></div>
@@ -153,23 +181,6 @@ export default async function Home() {
             const Icon = featureIcons[index];
             return <article key={key}><div className="feature-icon"><Icon /></div><h3>{t(`features.items.${key}.title`)}</h3><p>{t(`features.items.${key}.text`)}</p></article>;
           })}
-        </div>
-      </section>
-
-      <section id="showcase" className="landing-section showcase-section">
-        <div className="wrap">
-          <div className="landing-heading centered"><span>{t("showcase.label")}</span><h2>{t("showcase.title")}</h2><p>{t("showcase.description")}</p></div>
-          <div className="restaurant-grid">
-            {restaurants.map((restaurant) => (
-              <article className="restaurant-card" key={restaurant.key}>
-                <Link href="/menu/demo-bistro" aria-label={t("showcase.open", { name: t(`showcase.items.${restaurant.key}.name`) })}>
-                  <div className="restaurant-cover"><Image src={unsplash(restaurant.image, 700)} alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /></div>
-                  <div className="restaurant-logo">{restaurant.logo}</div>
-                  <div className="restaurant-card-copy"><small>{t(`showcase.items.${restaurant.key}.type`)}</small><h3>{t(`showcase.items.${restaurant.key}.name`)}</h3><p>{t(`showcase.items.${restaurant.key}.description`)}</p><strong>{t("showcase.view")}<ArrowRight /></strong></div>
-                </Link>
-              </article>
-            ))}
-          </div>
         </div>
       </section>
 
