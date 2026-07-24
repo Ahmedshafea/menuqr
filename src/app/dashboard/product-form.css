@@ -122,8 +122,93 @@
   gap: 16px;
   margin-top: 20px;
 }
+.import-panel {
+  width: min(760px, calc(100vw - 32px));
+}
+.import-requirements {
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid #dce4de;
+  border-radius: 16px;
+  background: #f8faf7;
+}
+.import-requirements h3 {
+  margin: 0 0 7px;
+  font-size: 18px;
+}
+.import-requirements h4 {
+  margin: 19px 0 8px;
+  font-size: 12px;
+}
+.import-requirements > p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.import-requirements ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-inline-start: 20px;
+  color: #4f5f58;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.import-requirements .import-valid-list,
+.import-requirements .import-invalid-list {
+  padding: 0;
+  list-style: none;
+}
+.import-requirements .import-valid-list li,
+.import-requirements .import-invalid-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.import-requirements li svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.import-valid-list svg {
+  color: #23845d;
+}
+.import-invalid-list svg {
+  color: #d64e31;
+}
+.import-requirements aside {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #fff4d6;
+  color: #5d4b19;
+}
+.import-requirements aside > svg {
+  width: 19px;
+  flex: none;
+}
+.import-requirements aside p {
+  margin: 4px 0 0;
+  color: #665b38;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.import-panel .form-error {
+  white-space: pre-line;
+}
 .template-links {
   flex-wrap: wrap;
+}
+@media (max-width: 620px) {
+  .import-requirements {
+    padding: 17px;
+  }
+  .template-links {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 .details-close {
   position: absolute;

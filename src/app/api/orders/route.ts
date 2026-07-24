@@ -8,6 +8,8 @@ import { rateLimit, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { auth } from "@/auth";
 import { hash } from "bcryptjs";
+import { createRestaurantNotification } from "@/lib/restaurant-notifications";
+import { isDemoSlug } from "@/lib/demo-restaurants";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -20,6 +22,8 @@ export async function POST(request: Request) {
   if (!parsed.success)
     return apiError("INVALID_ORDER", 400, parsed.error.flatten().fieldErrors);
   const data = parsed.data;
+  if (isDemoSlug(data.restaurantSlug))
+    return apiError("DEMO_READ_ONLY", 403);
   if (!(await verifyTurnstile(request, data.turnstileToken)))
     return apiError("TURNSTILE_FAILED", 400);
   const restaurant = await prisma.restaurant.findUnique({
@@ -32,7 +36,7 @@ export async function POST(request: Request) {
       currency: true,
       locale: true,
       isActive: true,
-      settings: { select: { allowOrdering: true } },
+      settings: { select: { allowOrdering: true, allowOrdersOutsideHours: true,offersDelivery:true,offersPickup:true,offersDineIn:true } },
       branches: {
         where: { isActive: true },
         select: {
@@ -50,7 +54,7 @@ export async function POST(request: Request) {
       products: {
         where: {
           id: { in: data.items.map((item) => item.productId) },
-          isAvailable: true,
+          availability: "AVAILABLE",
         },
         select: {
           id: true,
@@ -67,16 +71,18 @@ export async function POST(request: Request) {
               isAvailable: true,
             },
           },
+          optionGroups: { select: { group: { select: { id:true,name:true,nameAr:true,isRequired:true,minSelections:true,maxSelections:true,options:{select:{option:{select:{id:true,name:true,nameAr:true,priceAdjustment:true,isAvailable:true}}}} } } } },
         },
       },
     },
   });
   if (!restaurant?.isActive) return apiError("RESTAURANT_UNAVAILABLE", 404);
+  if((data.fulfillmentType==="DELIVERY"&&!restaurant.settings?.offersDelivery)||(data.fulfillmentType==="PICKUP"&&!restaurant.settings?.offersPickup)||(data.fulfillmentType==="DINE_IN"&&!restaurant.settings?.offersDineIn))return apiError("FULFILLMENT_UNAVAILABLE",409);
   const arabic = restaurant.locale === "ar";
   if (
     !(restaurant.settings?.allowOrdering ?? true) ||
     !restaurant.branches[0] ||
-    !isRestaurantOpen(restaurant.branches[0].workingHours)
+    (!restaurant.settings?.allowOrdersOutsideHours && !isRestaurantOpen(restaurant.branches[0].workingHours))
   )
     return apiError("ORDERING_CLOSED", 409);
   const productMap = new Map(
@@ -92,6 +98,7 @@ export async function POST(request: Request) {
   )
     return apiError("PRODUCT_UNAVAILABLE", 409);
   let total = 0;
+  let invalidOptionSelection = false;
   const verified = data.items.map((item) => {
     const product = productMap.get(item.productId);
     if (!product) throw new Error("Validated product missing");
@@ -102,18 +109,33 @@ export async function POST(request: Request) {
         ),
       )
       .filter(Boolean);
-    const unit =
+    const selectedIds=new Set(item.extras.map(extra=>extra.id));
+    const optionSelections=product.optionGroups.flatMap(({group})=>{
+      const available=group.options.map(({option})=>option).filter(option=>option.isAvailable);
+      const selected=available.filter(option=>selectedIds.has(option.id));
+      if(selected.length<group.minSelections||selected.length>group.maxSelections) invalidOptionSelection=true;
+      return selected;
+    });
+    const unit = Math.max(
+      0,
       Number(product.price) +
-      extras.reduce((sum, extra) => sum + Number(extra!.price), 0);
+        extras.reduce((sum, extra) => sum + Number(extra!.price), 0) +
+        optionSelections.reduce(
+          (sum, option) => sum + Number(option.priceAdjustment),
+          0,
+        ),
+    );
     total += unit * item.quantity;
     return {
       item,
       product,
       extras,
+      optionSelections,
       unit,
       displayName: arabic && product.nameAr ? product.nameAr : product.name,
     };
   });
+  if(invalidOptionSelection)return apiError("INVALID_OPTION_SELECTION",409);
   const number = `MQ-${Date.now().toString(36).toUpperCase()}`;
   const accessToken = randomBytes(24).toString("base64url");
   if (!session && data.createAccount && data.email) {
@@ -159,6 +181,8 @@ export async function POST(request: Request) {
         total,
         customerUserId,
         restaurantId: restaurant.id,
+        fulfillmentType:data.fulfillmentType,
+        statusHistory: { create: { status: "NEW", userId: customerUserId } },
         items: {
           create: verified.map((value) => ({
             productName: value.displayName,
@@ -172,16 +196,45 @@ export async function POST(request: Request) {
                 extraId: extra!.id,
               })),
             },
+            options: { create: value.optionSelections.map(option=>({name:arabic&&option.nameAr?option.nameAr:option.name,price:option.priceAdjustment,optionId:option.id})) },
           })),
         },
       },
     });
+    await createRestaurantNotification(transaction, {
+      restaurantId: restaurant.id,
+      type: "NEW_ORDER",
+      title: arabic ? `طلب جديد #${number}` : `New order #${number}`,
+      body: data.customerName,
+      href: `/order/${accessToken}`,
+      dedupeKey: `order:${created.id}`,
+    });
+    if (customerUserId)
+      await createRestaurantNotification(transaction, {
+        restaurantId: restaurant.id,
+        type: "NEW_CUSTOMER",
+        title: arabic ? "عميل جديد" : "New customer",
+        body: data.customerName,
+        href: "/dashboard/customers",
+        dedupeKey: `customer:${customerUserId}`,
+      });
     for (const value of verified)
-      if (value.product.stock !== null)
-        await transaction.product.update({
+      if (value.product.stock !== null) {
+        const updatedProduct = await transaction.product.update({
           where: { id: value.product.id },
           data: { stock: { decrement: value.item.quantity } },
+          select: { stock: true },
         });
+        if (updatedProduct.stock !== null && updatedProduct.stock <= 0)
+          await createRestaurantNotification(transaction, {
+            restaurantId: restaurant.id,
+            type: "OUT_OF_STOCK",
+            title: arabic ? "نفد مخزون منتج" : "Product is out of stock",
+            body: value.displayName,
+            href: "/dashboard/menu",
+            dedupeKey: `out-of-stock:${value.product.id}:${new Date().toISOString().slice(0, 10)}`,
+          });
+      }
     return created;
   });
   const restaurantName =

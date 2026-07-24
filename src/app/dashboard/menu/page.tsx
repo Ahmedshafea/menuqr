@@ -27,6 +27,7 @@ export default async function MenuManagementPage({
   const [
     menuText,
     toolsText,
+    productText,
     common,
     locale,
     restaurant,
@@ -36,6 +37,7 @@ export default async function MenuManagementPage({
   ] = await Promise.all([
     getTranslations("menuAdmin"),
     getTranslations("productTools"),
+    getTranslations("mvpPolish.products"),
     getTranslations("common"),
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
@@ -164,6 +166,7 @@ export default async function MenuManagementPage({
               ? Math.max(0, Number.parseInt(stockText, 10) || 0)
               : null,
             isAvailable: form.get("isAvailable") === "on",
+            availability: form.get("isAvailable") === "on" ? "AVAILABLE" : "HIDDEN",
             sortOrder: await tx.product.count({
               where: { restaurantId, categoryId },
             }),
@@ -193,24 +196,67 @@ export default async function MenuManagementPage({
     revalidatePath("/dashboard/menu");
     revalidateTag("public-menu");
     revalidatePath(`/menu/${restaurant.slug}`);
-    redirect("/dashboard/menu?result=created");
+    redirect("/dashboard/menu?result=created&toast=productCreated");
   }
 
-  async function toggleProduct(form: FormData) {
+  async function setAvailability(form: FormData) {
     "use server";
     const { restaurantId } = await requireTenant();
     const id = String(form.get("id"));
-    const product = await prisma.product.findFirst({
+    const availability = String(form.get("availability"));
+    if (!["AVAILABLE", "TEMPORARILY_UNAVAILABLE", "HIDDEN"].includes(availability)) return;
+    await prisma.product.updateMany({
       where: { id, restaurantId },
-      select: { isAvailable: true },
+      data: {
+        availability: availability as "AVAILABLE" | "TEMPORARILY_UNAVAILABLE" | "HIDDEN",
+        isAvailable: availability === "AVAILABLE",
+      },
     });
-    if (product)
-      await prisma.product.update({
-        where: { id },
-        data: { isAvailable: !product.isAvailable },
-      });
     revalidatePath("/dashboard/menu");
     revalidatePath(`/menu/${restaurant.slug}`);
+    revalidateTag("public-menu");
+  }
+  async function quickUpdate(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const id = String(form.get("id"));
+    const categoryId = String(form.get("categoryId") || "");
+    const price = Number(form.get("price"));
+    const featured = form.get("featured");
+    const data: { categoryId?: string; price?: number; isFeatured?: boolean } = {};
+    if (categoryId && await prisma.category.findFirst({ where: { id: categoryId, restaurantId }, select: { id: true } })) data.categoryId = categoryId;
+    if (Number.isFinite(price) && price >= 0) data.price = price;
+    if (featured === "true" || featured === "false") data.isFeatured = featured === "true";
+    if (Object.keys(data).length) await prisma.product.updateMany({ where: { id, restaurantId }, data });
+    revalidatePath("/dashboard/menu");
+    revalidateTag("public-menu");
+  }
+  async function duplicateProduct(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const source = await prisma.product.findFirst({
+      where: { id: String(form.get("id")), restaurantId },
+      select: { name: true, nameAr: true, description: true, descriptionAr: true, price: true, availability: true, isAvailable: true, isFeatured: true, stock: true, categoryId: true, images: { select: { url: true, publicId: true, alt: true, sortOrder: true } }, extras: { select: { name: true, nameAr: true, price: true, isAvailable: true } } },
+    });
+    if (!source) return;
+    await prisma.product.create({
+      data: {
+        restaurantId,
+        categoryId: source.categoryId,
+        name: `${source.name} (Copy)`,
+        nameAr: source.nameAr ? `${source.nameAr} (نسخة)` : null,
+        description: source.description,
+        descriptionAr: source.descriptionAr,
+        price: source.price,
+        availability: source.availability,
+        isAvailable: source.isAvailable,
+        isFeatured: false,
+        stock: source.stock,
+        images: { create: source.images.map((image) => ({ ...image, publicId: null })) },
+        extras: { create: source.extras },
+      },
+    });
+    revalidatePath("/dashboard/menu");
     revalidateTag("public-menu");
   }
   async function updateProduct(form: FormData) {
@@ -268,6 +314,7 @@ export default async function MenuManagementPage({
             ? Math.max(0, Number.parseInt(stockText, 10) || 0)
             : null,
           isAvailable: form.get("isAvailable") === "on",
+          availability: form.get("isAvailable") === "on" ? "AVAILABLE" : "HIDDEN",
           isFeatured: form.get("isFeatured") === "on",
           ...(uploaded
             ? {
@@ -309,7 +356,7 @@ export default async function MenuManagementPage({
     revalidatePath("/dashboard/menu");
     revalidatePath(`/menu/${restaurant.slug}`);
     revalidateTag("public-menu");
-    redirect("/dashboard/menu?result=updated");
+    redirect("/dashboard/menu?result=updated&toast=productUpdated");
   }
   async function deleteProduct(form: FormData) {
     "use server";
@@ -343,6 +390,7 @@ export default async function MenuManagementPage({
     revalidatePath("/dashboard/menu");
     revalidatePath(`/menu/${restaurant.slug}`);
     revalidateTag("public-menu");
+    redirect("/dashboard/menu?toast=productDeleted");
   }
 
   const money = (value: number) =>
@@ -488,6 +536,36 @@ export default async function MenuManagementPage({
               success: t("importSuccess"),
               error: t("importError"),
               close: common("close"),
+              requirementsTitle: toolsText("requirementsTitle"),
+              requirementsDescription: toolsText("requirementsDescription"),
+              productNameRequired: toolsText("productNameRequired"),
+              categoryRequired: toolsText("categoryRequired"),
+              priceRequired: toolsText("priceRequired"),
+              imageOptional: toolsText("imageOptional"),
+              ifImageProvided: toolsText("ifImageProvided"),
+              httpsOnly: toolsText("httpsOnly"),
+              directImage: toolsText("directImage"),
+              supportedFormats: toolsText("supportedFormats"),
+              recommendedSize: toolsText("recommendedSize"),
+              maximumSize: toolsText("maximumSize"),
+              notSupported: toolsText("notSupported"),
+              googleDrive: toolsText("googleDrive"),
+              googlePhotos: toolsText("googlePhotos"),
+              dropbox: toolsText("dropbox"),
+              oneDrive: toolsText("oneDrive"),
+              htmlPages: toolsText("htmlPages"),
+              tipTitle: toolsText("tipTitle"),
+              tipText: toolsText("tipText"),
+              invalidImage: toolsText("invalidImage"),
+              invalidDirectImage: toolsText("invalidDirectImage"),
+              imageTooLarge: toolsText("imageTooLarge"),
+              rowError: toolsText("rowError"),
+              productNameError: toolsText("productNameError"),
+              categoryError: toolsText("categoryError"),
+              priceError: toolsText("priceError"),
+              stockError: toolsText("stockError"),
+              booleanError: toolsText("booleanError"),
+              invalidRow: toolsText("invalidRow"),
             }}
           />
           <details className="product-create">
@@ -551,15 +629,14 @@ export default async function MenuManagementPage({
                   <td>{money(Number(product.price))}</td>
                   <td>{product.stock ?? "—"}</td>
                   <td>
-                    <form action={toggleProduct}>
+                    <form action={setAvailability} className="quick-availability">
                       <input type="hidden" name="id" value={product.id} />
-                      <button
-                        className={`status ${product.isAvailable ? "completed" : "cancelled"}`}
-                      >
-                        {product.isAvailable
-                          ? common("available")
-                          : common("hidden")}
-                      </button>
+                      <select name="availability" defaultValue={product.availability}>
+                        <option value="AVAILABLE">{productText("available")}</option>
+                        <option value="TEMPORARILY_UNAVAILABLE">{productText("temporary")}</option>
+                        <option value="HIDDEN">{productText("hidden")}</option>
+                      </select>
+                      <button aria-label={productText("save")}>✓</button>
                     </form>
                   </td>
                   <td>
@@ -589,6 +666,27 @@ export default async function MenuManagementPage({
                         label={t("delete")}
                         confirmation={t("deleteConfirmation")}
                       />
+                      <details className="quick-actions">
+                        <summary>•••</summary>
+                        <div>
+                          <form action={duplicateProduct}><input type="hidden" name="id" value={product.id}/><button>{productText("duplicate")}</button></form>
+                          <form action={quickUpdate}>
+                            <input type="hidden" name="id" value={product.id}/>
+                            <input type="hidden" name="featured" value={String(!product.isFeatured)}/>
+                            <button>{product.isFeatured ? productText("notFeatured") : productText("featured")}</button>
+                          </form>
+                          <form action={quickUpdate}>
+                            <input type="hidden" name="id" value={product.id}/>
+                            <select name="categoryId" defaultValue={product.categoryId}>{categories.map((category)=><option key={category.id} value={category.id}>{locale==="ar"&&category.nameAr?category.nameAr:category.name}</option>)}</select>
+                            <button>{productText("move")}</button>
+                          </form>
+                          <form action={quickUpdate}>
+                            <input type="hidden" name="id" value={product.id}/>
+                            <input name="price" type="number" min="0" step=".01" defaultValue={Number(product.price)} aria-label={productText("price")}/>
+                            <button>{productText("save")}</button>
+                          </form>
+                        </div>
+                      </details>
                     </div>
                   </td>
                 </tr>
@@ -596,7 +694,11 @@ export default async function MenuManagementPage({
             </tbody>
           </table>
         ) : (
-          <p>{t("noProducts")}</p>
+          <div className="friendly-empty">
+            <Plus />
+            <h2>{productText("emptyTitle")}</h2>
+            <p>{productText("emptyHelp")}</p>
+          </div>
         )}
         <div className="pagination">
           {page > 1 && (

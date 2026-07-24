@@ -99,6 +99,7 @@ export default async function TeamPage({
             <thead>
               <tr>
                 <th>{t("member")}</th>
+                <th>{t("email")}</th>
                 <th>{t("role")}</th>
                 <th>{t("status")}</th>
               </tr>
@@ -108,7 +109,9 @@ export default async function TeamPage({
                 <tr key={member.id}>
                   <td>
                     <strong>{member.user.name}</strong>
-                    <small>{member.user.email}</small>
+                  </td>
+                  <td>
+                  {member.user.email}
                   </td>
                   <td>{member.role}</td>
                   <td>

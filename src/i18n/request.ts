@@ -16,13 +16,18 @@ export default getRequestConfig(async () => {
     cookieLocale === "en" || cookieLocale === "ar"
       ? cookieLocale
       : browserLocale;
-  const [messages, productTools, orderTracking, qr, landingV2, customerAccount] = await Promise.all([
+  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow] = await Promise.all([
     import(`../../messages/${locale}.json`),
     import(`../../messages/product-tools.${locale}.json`),
     import(`../../messages/order-tracking.${locale}.json`),
     import(`../../messages/qr.${locale}.json`),
     import(`../../messages/landing-v2.${locale}.json`),
     import(`../../messages/customer-account.${locale}.json`),
+    import(`../../messages/toast.${locale}.json`),
+    import(`../../messages/launch-polish.${locale}.json`),
+    import(`../../messages/mvp-polish.${locale}.json`),
+    import(`../../messages/demo.${locale}.json`),
+    import(`../../messages/restaurant-workflow.${locale}.json`),
   ]);
   return {
     locale,
@@ -33,6 +38,11 @@ export default getRequestConfig(async () => {
       qr: qr.default,
       landingV2: landingV2.default,
       customerAccount: customerAccount.default,
+      toast: toast.default,
+      launchPolish: launchPolish.default,
+      mvpPolish: mvpPolish.default,
+      demo: demo.default,
+      restaurantWorkflow: restaurantWorkflow.default,
     },
     timeZone: "Africa/Cairo",
   };

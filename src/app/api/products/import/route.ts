@@ -1,10 +1,51 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { parseProductImport, productMatchKey } from "@/lib/product-import";
+import { parseImageUrl, parseProductImport, productMatchKey, type ProductImportRow } from "@/lib/product-import";
 import { revalidateTag } from "next/cache";
 import { apiError, logApiError } from "@/lib/api";
+import { isIP } from "node:net";
+import { lookup } from "node:dns/promises";
 
 export const runtime = "nodejs";
+
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+function privateAddress(address: string) {
+  if (isIP(address) === 4) {
+    const [a, b] = address.split(".").map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+  const normalized = address.toLowerCase();
+  return normalized === "::1" || normalized === "::" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:");
+}
+
+async function validateImage(row: ProductImportRow) {
+  if (!row.imageUrl) return null;
+  try {
+    let url = parseImageUrl(row.imageUrl);
+    for (let redirects = 0; redirects <= 3; redirects++) {
+      if (["localhost", "localhost.localdomain"].includes(url.hostname.toLowerCase())) throw new Error("private_host");
+      const addresses = await lookup(url.hostname, { all: true });
+      if (!addresses.length || addresses.some(({ address }) => privateAddress(address))) throw new Error("private_host");
+      const response = await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(6000), headers: { accept: "image/avif,image/webp,image/png,image/jpeg" } });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || redirects === 3) return { rowNumber: row.rowNumber, reason: "UNSUPPORTED_IMAGE_URL" };
+        url = parseImageUrl(new URL(location, url).toString());
+        continue;
+      }
+      const type = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+      const size = Number(response.headers.get("content-length") || 0);
+      if (!response.ok || !type || !IMAGE_TYPES.has(type)) return { rowNumber: row.rowNumber, reason: "NOT_DIRECT_IMAGE" };
+      if (size > MAX_IMAGE_BYTES) return { rowNumber: row.rowNumber, reason: "IMAGE_TOO_LARGE" };
+      return null;
+    }
+    return { rowNumber: row.rowNumber, reason: "UNSUPPORTED_IMAGE_URL" };
+  } catch {
+    return { rowNumber: row.rowNumber, reason: "UNSUPPORTED_IMAGE_URL" };
+  }
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -26,12 +67,17 @@ export async function POST(request: Request) {
     return apiError("UNSUPPORTED_FILE", 400);
   try {
     const parsed = parseProductImport(await file.arrayBuffer(), extension);
-    const storageHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null;
-    if (parsed.rows.some(row => row.imageUrl && (!storageHost || new URL(row.imageUrl).hostname !== storageHost))) return apiError("IMAGE_URL_MUST_USE_SUPABASE", 422);
     if (parsed.errors.length)
       return apiError("INVALID_IMPORT_ROWS", 422, parsed.errors.slice(0, 12));
     if (!parsed.rows.length)
       return apiError("EMPTY_IMPORT", 422);
+    const imageErrors: { rowNumber: number; reason: string }[] = [];
+    for (let index = 0; index < parsed.rows.length; index += 8) {
+      const batch = await Promise.all(parsed.rows.slice(index, index + 8).map(validateImage));
+      imageErrors.push(...batch.filter((error): error is { rowNumber: number; reason: string } => Boolean(error)));
+      if (imageErrors.length >= 12) break;
+    }
+    if (imageErrors.length) return apiError("INVALID_IMAGE_URLS", 422, imageErrors.slice(0, 12));
     const [categories, products] = await Promise.all([
       prisma.category.findMany({
         where: { restaurantId },
@@ -104,6 +150,7 @@ export async function POST(request: Request) {
             price: row.price,
             stock: row.stock,
             isAvailable: row.available,
+            availability: row.available ? ("AVAILABLE" as const) : ("HIDDEN" as const),
             isFeatured: row.featured,
           };
           if (productId) {

@@ -1,0 +1,15 @@
+{
+  "badge": "Demo Restaurant",
+  "note": "This is a live demonstration. Changes are not saved.",
+  "favorite": "Save favorite for this demo",
+  "extras": "Choose extras",
+  "generatePreview": "Generate WhatsApp order preview",
+  "previewTitle": "WhatsApp order preview",
+  "notSent": "Demo only — this order was not sent or saved.",
+  "sectionLabel": "EXPLORE LIVE DEMOS",
+  "sectionTitle": "Try MenuQR before you register",
+  "sectionDescription": "Live examples of how your menu can look on customers’ phones. Browse, build a cart and choose extras without saving an order.",
+  "products": "{count} products",
+  "view": "View Live Demo",
+  "delivery":"Delivery","pickup":"Pickup","dineIn":"Dine-in"
+}

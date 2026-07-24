@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
+import { Heart, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -20,7 +20,9 @@ export type MenuProduct = {
   category: string;
   image: string;
   featured?: boolean;
+  available: boolean;
   extras: { id: string; name: string; price: number }[];
+  optionGroups: { id:string; name:string; required:boolean; min:number; max:number; options:{id:string;name:string;price:number}[] }[];
 };
 export function MenuClient({
   restaurant,
@@ -28,16 +30,21 @@ export function MenuClient({
   orderingEnabled = true,
   initialCart = {},
   customerDefaults,
+  demo = false,
 }: {
-  restaurant: { name: string; slug: string; currency: string };
+  restaurant: { name: string; slug: string; currency: string; fulfillment:{delivery:boolean;pickup:boolean;dineIn:boolean} };
   products: MenuProduct[];
   orderingEnabled?: boolean;
   initialCart?: Record<string, number>;
   customerDefaults?: { name: string; phone: string; address: string };
+  demo?: boolean;
 }) {
   const t = useTranslations("publicMenu");
   const accountT = useTranslations("customerAccount.checkout");
   const common = useTranslations("common");
+  const productText = useTranslations("mvpPolish.products");
+  const demoText = useTranslations("demo");
+  const validationText = useTranslations("restaurantWorkflow.validation");
   const locale = useLocale();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("__all");
@@ -47,6 +54,9 @@ export function MenuClient({
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [createAccount, setCreateAccount] = useState(false);
+  const [selectedExtras, setSelectedExtras] = useState<Record<string, string[]>>({});
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [demoPreview, setDemoPreview] = useState("");
   const categories = [...new Set(products.map((product) => product.category))];
   const visible = products.filter(
     (product) =>
@@ -56,11 +66,13 @@ export function MenuClient({
   const count = Object.values(cart).reduce((sum, value) => sum + value, 0);
   const total = useMemo(
     () =>
-      products.reduce(
-        (sum, product) => sum + (cart[product.id] || 0) * product.price,
-        0,
-      ),
-    [cart, products],
+      products.reduce((sum, product) => {
+        const extrasTotal = product.extras
+          .filter((extra) => selectedExtras[product.id]?.includes(extra.id))
+          .reduce((extraSum, extra) => extraSum + extra.price, 0);
+        return sum + (cart[product.id] || 0) * Math.max(0, product.price + extrasTotal);
+      }, 0),
+    [cart, products, selectedExtras],
   );
   const money = (value: number) =>
     new Intl.NumberFormat(locale, {
@@ -68,7 +80,7 @@ export function MenuClient({
       currency: restaurant.currency,
     }).format(value);
   const update = (id: string, amount: number) => {
-    if (!orderingEnabled) return;
+    if (!orderingEnabled || !products.find((product) => product.id === id)?.available) return;
     setCart((current) => ({
       ...current,
       [id]: Math.max(0, (current[id] || 0) + amount),
@@ -79,6 +91,36 @@ export function MenuClient({
     setLoading(true);
     setError("");
     const form = new FormData(event.currentTarget);
+    for (const product of products.filter((item)=>cart[item.id])) {
+      for (const group of product.optionGroups) {
+        const count=group.options.filter((option)=>selectedExtras[product.id]?.includes(option.id)).length;
+        if(count<group.min||count>group.max){setError(validationText("selectionRange",{min:group.min,max:group.max,group:group.name}));setLoading(false);return;}
+      }
+    }
+    const orderItems = products
+      .filter((product) => cart[product.id])
+      .map((product) => ({
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: cart[product.id],
+        extras: product.extras.filter((extra) =>
+          selectedExtras[product.id]?.includes(extra.id),
+        ),
+      }));
+    if (demo) {
+      const lines = orderItems.map((item) => {
+        const selected = item.extras.length
+          ? ` (${item.extras.map((extra) => extra.name).join(", ")})`
+          : "";
+        return `• ${item.quantity} × ${item.name}${selected}`;
+      });
+      setDemoPreview(
+        `${demoText("previewTitle")}\n${restaurant.name}\n\n${lines.join("\n")}\n\n${t("total")}: ${money(total)}\n\n${demoText("notSent")}`,
+      );
+      setLoading(false);
+      return;
+    }
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -87,20 +129,13 @@ export function MenuClient({
         customerName: form.get("name"),
         customerPhone: form.get("phone"),
         deliveryAddress: form.get("address") || undefined,
+        fulfillmentType:form.get("fulfillmentType"),
         notes: form.get("notes") || undefined,
         createAccount,
         email: createAccount ? form.get("email") : undefined,
         password: createAccount ? form.get("password") : undefined,
         turnstileToken,
-        items: products
-          .filter((product) => cart[product.id])
-          .map((product) => ({
-            productId: product.id,
-            name: product.name,
-            price: product.price,
-            quantity: cart[product.id],
-            extras: [],
-          })),
+        items: orderItems,
       }),
     });
     const body = await response.json();
@@ -150,6 +185,22 @@ export function MenuClient({
           <div className="product-grid">
             {visible.map((product) => (
               <article className="product-card" key={product.id}>
+                {demo && (
+                  <button
+                    type="button"
+                    className={`demo-favorite ${favorites.includes(product.id) ? "saved" : ""}`}
+                    onClick={() =>
+                      setFavorites((current) =>
+                        current.includes(product.id)
+                          ? current.filter((id) => id !== product.id)
+                          : [...current, product.id],
+                      )
+                    }
+                    aria-label={demoText("favorite")}
+                  >
+                    <Heart />
+                  </button>
+                )}
                 <Link
                   href={`/menu/${restaurant.slug}/product/${product.id}`}
                   className="product-detail-link"
@@ -164,6 +215,7 @@ export function MenuClient({
                       />
                     )}
                     {product.featured && <span>{t("featured")}</span>}
+                    {!product.available && <span className="unavailable-badge">{productText("temporary")}</span>}
                   </div>
                 </Link>
                 <div className="product-info">
@@ -190,6 +242,7 @@ export function MenuClient({
                     <button
                       className="add"
                       onClick={() => update(product.id, 1)}
+                      disabled={!product.available}
                       aria-label={t("add", { product: product.name })}
                     >
                       <Plus />
@@ -226,11 +279,34 @@ export function MenuClient({
               {products
                 .filter((product) => cart[product.id])
                 .map((product) => (
-                  <div key={product.id}>
+                  <div key={product.id} className="cart-product-line">
                     <span>
                       {cart[product.id]} × {product.name}
                     </span>
-                    <b>{money(product.price * cart[product.id])}</b>
+                    <b>{money(Math.max(0,product.price + product.extras.filter((extra) => selectedExtras[product.id]?.includes(extra.id)).reduce((sum, extra) => sum + extra.price, 0)) * cart[product.id])}</b>
+                    {product.extras.length > 0 && (
+                      <fieldset>
+                        <legend>{demoText("extras")}</legend>
+                        {product.extras.map((extra) => (
+                          <label key={extra.id}>
+                            <input
+                              type="checkbox"
+                              checked={selectedExtras[product.id]?.includes(extra.id) ?? false}
+                              onChange={(event) =>
+                                setSelectedExtras((current) => ({
+                                  ...current,
+                                  [product.id]: event.target.checked
+                                    ? [...(current[product.id] ?? []), extra.id]
+                                    : (current[product.id] ?? []).filter((id) => id !== extra.id),
+                                }))
+                              }
+                            />
+                            <span>{extra.name}</span>
+                            <small>+ {money(extra.price)}</small>
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
                   </div>
                 ))}
             </div>
@@ -239,11 +315,12 @@ export function MenuClient({
               <strong>{money(total)}</strong>
             </div>
             <form onSubmit={checkout}>
+              <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" defaultChecked/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" defaultChecked={!restaurant.fulfillment.delivery}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" defaultChecked={!restaurant.fulfillment.delivery&&!restaurant.fulfillment.pickup}/>{demoText("dineIn")}</label>}</div>
               <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
               <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
               <input name="address" placeholder={t("address")} defaultValue={customerDefaults?.address} />
               <textarea name="notes" placeholder={t("notes")} />
-              {!customerDefaults && <section className="checkout-account-choice">
+              {!demo && !customerDefaults && <section className="checkout-account-choice">
                 <h3>{accountT("saveInfoTitle")}</h3>
                 <p>{accountT("saveInfoText")}</p>
                 <ul>
@@ -259,11 +336,17 @@ export function MenuClient({
                   <small>{accountT("accountPasswordHint")}</small>
                 </div>}
               </section>}
-              <TurnstileWidget onToken={setTurnstileToken} />
+              {!demo && <TurnstileWidget onToken={setTurnstileToken} />}
               {error && <p className="form-error">{error}</p>}
               <button className="button primary large" disabled={loading}>
-                {loading ? common("noData") : t("whatsapp")}
+                {loading ? common("noData") : demo ? demoText("generatePreview") : t("whatsapp")}
               </button>
+              {demoPreview && (
+                <section className="demo-order-preview">
+                  <h3>{demoText("previewTitle")}</h3>
+                  <pre>{demoPreview}</pre>
+                </section>
+              )}
             </form>
           </div>
         </div>

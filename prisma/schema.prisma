@@ -24,6 +24,9 @@ model User {
   customerProfile       CustomerProfile?
   customerOrders        Order[]              @relation("CustomerOrders")
   orderMessages         OrderMessage[]
+  orderStatusChanges    OrderStatusHistory[]
+  orderActions          OrderActionLog[]
+  notificationsRead     RestaurantNotificationRead[]
   resetTokens           PasswordResetToken[]
   restaurantMemberships RestaurantMember[]
   roles                 UserRole[]
@@ -154,6 +157,11 @@ model Restaurant {
   members           RestaurantMember[]
   settings          Setting?
   subscriptions     Subscription[]
+  notifications     RestaurantNotification[]
+  optionGroups      ProductOptionGroup[]
+  options           ProductOption[]
+  drivers           DeliveryDriver[]
+  reviews           RestaurantReview[]
 }
 
 model Branch {
@@ -207,6 +215,7 @@ model Product {
   descriptionAr     String?
   price             Decimal                   @db.Decimal(10, 2)
   isAvailable       Boolean                   @default(true)
+  availability      ProductAvailability       @default(AVAILABLE)
   isFeatured        Boolean                   @default(false)
   sortOrder         Int                       @default(0)
   restaurantId      String
@@ -214,12 +223,15 @@ model Product {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   stock             Int?
+  lowStockThreshold Int?
   customerFavorites CustomerFavoriteProduct[]
   extras            Extra[]
   orderItems        OrderItem[]
   category          Category                  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   restaurant        Restaurant                @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   images            ProductImage[]
+  optionGroups      ProductOptionGroupProduct[]
+  standaloneOptions ProductOption[]             @relation("StandaloneOptionProduct")
 
   @@index([restaurantId, categoryId])
   @@index([categoryId, sortOrder])
@@ -261,7 +273,7 @@ model Order {
   notes           String?
   subtotal        Decimal        @db.Decimal(10, 2)
   total           Decimal        @db.Decimal(10, 2)
-  status          OrderStatus    @default(PENDING)
+  status          OrderStatus    @default(NEW)
   restaurantId    String
   branchId        String?
   createdAt       DateTime       @default(now())
@@ -273,10 +285,47 @@ model Order {
   restaurant      Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   items           OrderItem[]
   messages        OrderMessage[]
+  statusHistory   OrderStatusHistory[]
+  actionLogs      OrderActionLog[]
+  driver          DeliveryDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId        String?
+  fulfillmentType FulfillmentType @default(DELIVERY)
+  driverAssignedAt DateTime?
+  outForDeliveryAt DateTime?
+  deliveredAt     DateTime?
+  estimatedArrivalAt DateTime?
+  review           RestaurantReview?
 
   @@index([restaurantId, createdAt])
   @@index([customerUserId, createdAt])
   @@index([restaurantId, status, createdAt])
+  @@index([restaurantId, fulfillmentType, createdAt])
+  @@index([driverId, status])
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(cuid())
+  orderId   String
+  status    OrderStatus
+  userId    String?
+  createdAt DateTime    @default(now())
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+}
+
+model OrderActionLog {
+  id        String   @id @default(cuid())
+  orderId   String
+  userId    String?
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
 }
 
 model OrderMessage {
@@ -298,11 +347,13 @@ model OrderItem {
   unitPrice   Decimal          @db.Decimal(10, 2)
   quantity    Int
   notes       String?
+  isComplimentary Boolean @default(false)
   orderId     String
   productId   String?
   order       Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product?         @relation(fields: [productId], references: [id])
   extras      OrderItemExtra[]
+  options     OrderItemOption[]
 
   @@index([orderId])
 }
@@ -364,9 +415,157 @@ model Setting {
   deliveryFee           Decimal    @default(0) @db.Decimal(10, 2)
   minimumOrder          Decimal    @default(0) @db.Decimal(10, 2)
   allowOrdering         Boolean    @default(true)
+  allowOrdersOutsideHours Boolean  @default(false)
+  inventoryTrackingEnabled Boolean @default(false)
+  setupChecklistDismissed Boolean  @default(false)
+  offersDelivery          Boolean  @default(true)
+  offersPickup            Boolean  @default(true)
+  offersDineIn            Boolean  @default(false)
   restaurantId          String     @unique
   estimatedOrderMinutes Int        @default(30)
   restaurant            Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+model ProductOptionGroup {
+  id           String                      @id @default(cuid())
+  restaurantId String
+  name         String
+  nameAr       String?
+  description  String?
+  descriptionAr String?
+  isRequired   Boolean                     @default(false)
+  minSelections Int                        @default(0)
+  maxSelections Int                        @default(1)
+  sortOrder    Int                         @default(0)
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+  restaurant   Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  options      ProductOptionGroupItem[]
+  products     ProductOptionGroupProduct[]
+
+  @@index([restaurantId, sortOrder])
+}
+
+model ProductOption {
+  id                  String                   @id @default(cuid())
+  restaurantId        String
+  name                String
+  nameAr              String?
+  description         String?
+  descriptionAr       String?
+  priceAdjustment     Decimal                  @default(0) @db.Decimal(10, 2)
+  isAvailable         Boolean                  @default(true)
+  sortOrder           Int                      @default(0)
+  standaloneProductId String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  restaurant          Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  standaloneProduct   Product?                 @relation("StandaloneOptionProduct", fields: [standaloneProductId], references: [id], onDelete: SetNull)
+  groups              ProductOptionGroupItem[]
+  orderItems          OrderItemOption[]
+
+  @@index([restaurantId, isAvailable, sortOrder])
+  @@index([standaloneProductId])
+}
+
+model ProductOptionGroupItem {
+  groupId   String
+  optionId  String
+  sortOrder Int                @default(0)
+  group     ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  option    ProductOption      @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, optionId])
+  @@index([optionId])
+}
+
+model ProductOptionGroupProduct {
+  groupId   String
+  productId String
+  sortOrder Int                @default(0)
+  group     ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, productId])
+  @@index([productId, sortOrder])
+}
+
+model OrderItemOption {
+  id          String         @id @default(cuid())
+  orderItemId String
+  optionId    String?
+  name        String
+  price       Decimal        @db.Decimal(10, 2)
+  orderItem   OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  option      ProductOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@index([optionId])
+}
+
+model DeliveryDriver {
+  id           String       @id @default(cuid())
+  restaurantId String
+  name         String
+  phone        String
+  whatsapp     String?
+  photoUrl     String?
+  vehicleType  String?
+  status       DriverStatus @default(AVAILABLE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@index([restaurantId, status])
+}
+
+model RestaurantReview {
+  id             String       @id @default(cuid())
+  restaurantId   String
+  orderId        String       @unique
+  customerUserId String?
+  foodQuality    Int
+  deliverySpeed  Int
+  packaging      Int
+  overall        Int
+  comment        String?
+  status         ReviewStatus @default(PENDING)
+  publishedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  restaurant     Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status, createdAt])
+  @@index([restaurantId, overall])
+}
+
+model RestaurantNotification {
+  id           String                     @id @default(cuid())
+  restaurantId String
+  type         RestaurantNotificationType
+  title        String
+  body         String?
+  href         String?
+  dedupeKey    String?
+  createdAt    DateTime                   @default(now())
+  restaurant   Restaurant                 @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reads        RestaurantNotificationRead[]
+
+  @@unique([restaurantId, dedupeKey])
+  @@index([restaurantId, createdAt])
+}
+
+model RestaurantNotificationRead {
+  notificationId String
+  userId         String
+  readAt         DateTime               @default(now())
+  notification   RestaurantNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, readAt])
 }
 
 model AnalyticsEvent {
@@ -406,12 +605,54 @@ enum Role {
 }
 
 enum OrderStatus {
-  PENDING
+  NEW
   CONFIRMED
   PREPARING
   READY
+  ASSIGNED_TO_DRIVER
+  OUT_FOR_DELIVERY
+  DELIVERED
   COMPLETED
   CANCELLED
+  REJECTED
+  FAILED_DELIVERY
+}
+
+enum FulfillmentType {
+  DELIVERY
+  PICKUP
+  DINE_IN
+}
+
+enum DriverStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
+enum ProductAvailability {
+  AVAILABLE
+  TEMPORARILY_UNAVAILABLE
+  HIDDEN
+}
+
+enum RestaurantNotificationType {
+  NEW_ORDER
+  APPROVAL_REQUIRED
+  OUT_OF_STOCK
+  NEW_CUSTOMER
+  FIRST_QR_SCAN
+  NEW_REVIEW
+  LOW_RATING
+  DRIVER_ASSIGNED
+  DRIVER_CHANGED
+  DELIVERY_COMPLETED
 }
 
 enum SubscriptionStatus {

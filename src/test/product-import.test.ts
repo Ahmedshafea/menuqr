@@ -15,10 +15,20 @@ describe("product import", () => {
     const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, "Products");
     const buffer = XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
     const parsed = parseProductImport(buffer, "xlsx");
-    expect(parsed.rows).toHaveLength(0); expect(parsed.errors[0]).toContain("Row 2");
+    expect(parsed.rows).toHaveLength(0); expect(parsed.errors[0]).toEqual({ rowNumber: 2, reason: "INVALID_PRICE" });
   });
 
   it("matches product and category names case-insensitively", () => {
     expect(productMatchKey(" Drinks ", "Coffee")).toBe(productMatchKey("drinks", "coffee"));
+  });
+
+  it("rejects non-HTTPS and file-sharing image URLs with row details", () => {
+    const csv = "category_en,name_en,price,image_url\nFood,Burger,100,https://drive.google.com/file/d/example";
+    const parsed = parseProductImport(new TextEncoder().encode(csv).buffer, "csv");
+    expect(parsed.rows).toHaveLength(0);
+    expect(parsed.errors[0]).toEqual({
+      rowNumber: 2,
+      reason: "image_url uses an unsupported sharing service",
+    });
   });
 });
