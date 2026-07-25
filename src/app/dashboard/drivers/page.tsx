@@ -1,5 +1,123 @@
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
-import { prisma } from "@/lib/prisma";import { requireTenant } from "@/lib/tenant";
-export const dynamic="force-dynamic";
-export default async function DriversPage(){const{restaurantId}=await requireTenant();const[t,drivers]=await Promise.all([getTranslations("restaurantWorkflow.delivery"),prisma.deliveryDriver.findMany({where:{restaurantId},orderBy:{createdAt:"desc"}})]);async function save(form:FormData){"use server";const{restaurantId}=await requireTenant();const name=String(form.get("name")||"").trim();const phone=String(form.get("phone")||"").replace(/\D/g,"");if(name.length<2||phone.length<8)return;await prisma.deliveryDriver.create({data:{restaurantId,name,phone,whatsapp:String(form.get("whatsapp")||"").replace(/\D/g,"")||null,photoUrl:String(form.get("photoUrl")||"").trim()||null,vehicleType:String(form.get("vehicleType")||"").trim()||null}});revalidatePath("/dashboard/drivers");}async function status(form:FormData){"use server";const{restaurantId}=await requireTenant();const value=String(form.get("status"));if(!["AVAILABLE","BUSY","OFFLINE"].includes(value))return;await prisma.deliveryDriver.updateMany({where:{id:String(form.get("id")),restaurantId},data:{status:value as "AVAILABLE"|"BUSY"|"OFFLINE"}});revalidatePath("/dashboard/drivers");}return <section className="dash-main"><header><div><h1>{t("title")}</h1><p>{t("subtitle")}</p></div></header><form action={save} className="dash-card settings-grid"><h2>{t("new")}</h2><label>{t("name")}<input name="name" required/></label><label>{t("phone")}<input name="phone" required/></label><label>{t("whatsapp")}<input name="whatsapp"/></label><label>{t("vehicle")}<input name="vehicleType"/></label><label>{t("photo")}<input name="photoUrl" type="url"/></label><button className="button primary">{t("new")}</button></form><div className="driver-grid">{drivers.map(driver=><article className="dash-card" key={driver.id}>{driver.photoUrl&&<span className="driver-photo" style={{backgroundImage:`url(${driver.photoUrl})`}}/>}<h2>{driver.name}</h2><p>{driver.phone} · {driver.vehicleType||"—"}</p><form action={status}><input type="hidden" name="id" value={driver.id}/><select name="status" defaultValue={driver.status}><option value="AVAILABLE">{t("available")}</option><option value="BUSY">{t("busy")}</option><option value="OFFLINE">{t("offline")}</option></select><button>{t("status")}</button></form></article>)}</div></section>}
+import { prisma } from "@/lib/prisma";
+import { requireTenant } from "@/lib/tenant";
+import { uploadRestaurantImage } from "@/lib/supabase/storage";
+
+export const dynamic = "force-dynamic";
+
+export default async function DriversPage() {
+  const { restaurantId } = await requireTenant();
+  const [t, drivers] = await Promise.all([
+    getTranslations("restaurantWorkflow.delivery"),
+    prisma.deliveryDriver.findMany({
+      where: { restaurantId },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  async function save(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const name = String(form.get("name") || "").trim();
+    const phone = String(form.get("phone") || "").replace(/\D/g, "");
+    if (name.length < 2 || phone.length < 8) return;
+    const photo = form.get("photo");
+    const uploaded =
+      photo instanceof File && photo.size > 0
+        ? await uploadRestaurantImage({
+            bucket: "restaurant-logos",
+            restaurantId,
+            file: photo,
+          })
+        : null;
+    await prisma.deliveryDriver.create({
+      data: {
+        restaurantId,
+        name,
+        phone,
+        whatsapp:
+          String(form.get("whatsapp") || "").replace(/\D/g, "") || null,
+        photoUrl: uploaded?.url ?? null,
+        vehicleType: String(form.get("vehicleType") || "").trim() || null,
+      },
+    });
+    revalidatePath("/dashboard/drivers");
+  }
+
+  async function status(form: FormData) {
+    "use server";
+    const { restaurantId } = await requireTenant();
+    const value = String(form.get("status"));
+    if (!["AVAILABLE", "BUSY", "OFFLINE"].includes(value)) return;
+    await prisma.deliveryDriver.updateMany({
+      where: { id: String(form.get("id")), restaurantId },
+      data: { status: value as "AVAILABLE" | "BUSY" | "OFFLINE" },
+    });
+    revalidatePath("/dashboard/drivers");
+  }
+
+  return (
+    <section className="dash-main">
+      <header>
+        <div>
+          <h1>{t("title")}</h1>
+          <p>{t("subtitle")}</p>
+        </div>
+      </header>
+      <form action={save} className="dash-card settings-grid">
+        <h2>{t("new")}</h2>
+        <label>
+          {t("name")}
+          <input name="name" required />
+        </label>
+        <label>
+          {t("phone")}
+          <input name="phone" required />
+        </label>
+        <label>
+          {t("whatsapp")}
+          <input name="whatsapp" />
+        </label>
+        <label>
+          {t("vehicle")}
+          <input name="vehicleType" />
+        </label>
+        <label>
+          {t("photo")}
+          <input
+            name="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+          />
+        </label>
+        <button className="button primary">{t("new")}</button>
+      </form>
+      <div className="driver-grid">
+        {drivers.map((driver) => (
+          <article className="dash-card" key={driver.id}>
+            {driver.photoUrl && (
+              <span
+                className="driver-photo"
+                style={{ backgroundImage: `url(${driver.photoUrl})` }}
+              />
+            )}
+            <h2>{driver.name}</h2>
+            <p>
+              {driver.phone} · {driver.vehicleType || "—"}
+            </p>
+            <form action={status}>
+              <input type="hidden" name="id" value={driver.id} />
+              <select name="status" defaultValue={driver.status}>
+                <option value="AVAILABLE">{t("available")}</option>
+                <option value="BUSY">{t("busy")}</option>
+                <option value="OFFLINE">{t("offline")}</option>
+              </select>
+              <button>{t("status")}</button>
+            </form>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}

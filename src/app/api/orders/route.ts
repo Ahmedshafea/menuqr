@@ -10,6 +10,7 @@ import { auth } from "@/auth";
 import { hash } from "bcryptjs";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { isDemoSlug } from "@/lib/demo-restaurants";
+import { calculateOrderPricing } from "@/lib/order-pricing";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
       currency: true,
       locale: true,
       isActive: true,
-      settings: { select: { allowOrdering: true, allowOrdersOutsideHours: true,offersDelivery:true,offersPickup:true,offersDineIn:true } },
+      settings: { select: { allowOrdering: true, allowOrdersOutsideHours: true,offersDelivery:true,offersPickup:true,offersDineIn:true,deliveryFee:true,deliveryFeeType:true,serviceFee:true,serviceFeeType:true,taxRate:true,taxType:true,discountValue:true,discountType:true } },
       branches: {
         where: { isActive: true },
         select: {
@@ -113,7 +114,14 @@ export async function POST(request: Request) {
     const optionSelections=product.optionGroups.flatMap(({group})=>{
       const available=group.options.map(({option})=>option).filter(option=>option.isAvailable);
       const selected=available.filter(option=>selectedIds.has(option.id));
-      if(selected.length<group.minSelections||selected.length>group.maxSelections) invalidOptionSelection=true;
+      if (!available.length) return [];
+      const minimum = group.isRequired
+        ? Math.max(1, group.minSelections)
+        : 0;
+      const maximum = group.isRequired
+        ? group.maxSelections
+        : available.length;
+      if(selected.length<minimum||selected.length>maximum) invalidOptionSelection=true;
       return selected;
     });
     const unit = Math.max(
@@ -136,6 +144,13 @@ export async function POST(request: Request) {
     };
   });
   if(invalidOptionSelection)return apiError("INVALID_OPTION_SELECTION",409);
+  const pricing = calculateOrderPricing(total, data.fulfillmentType, restaurant.settings ? {
+    ...restaurant.settings,
+    deliveryFee: Number(restaurant.settings.deliveryFee),
+    serviceFee: Number(restaurant.settings.serviceFee),
+    taxRate: Number(restaurant.settings.taxRate),
+    discountValue: Number(restaurant.settings.discountValue),
+  } : {});
   const number = `MQ-${Date.now().toString(36).toUpperCase()}`;
   const accessToken = randomBytes(24).toString("base64url");
   if (!session && data.createAccount && data.email) {
@@ -177,8 +192,12 @@ export async function POST(request: Request) {
         customerPhone: data.customerPhone,
         deliveryAddress: data.deliveryAddress,
         notes: data.notes,
-        subtotal: total,
-        total,
+        subtotal: pricing.subtotal,
+        discountAmount: pricing.discountAmount,
+        deliveryFee: pricing.deliveryFee,
+        serviceFee: pricing.serviceFee,
+        taxAmount: pricing.taxAmount,
+        total: pricing.total,
         customerUserId,
         restaurantId: restaurant.id,
         fulfillmentType:data.fulfillmentType,

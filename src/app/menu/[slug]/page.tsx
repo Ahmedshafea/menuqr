@@ -66,7 +66,7 @@ export default async function MenuPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ reorder?: string }>;
+  searchParams: Promise<{ reorder?: string; extras?: string; checkout?: string }>;
 }) {
   const [restaurant, t, qr, closedText, experienceText, demoText, reviewsText, locale] = await Promise.all([
     getRestaurant((await params).slug),
@@ -108,11 +108,23 @@ export default async function MenuPage({
       name: locale === "ar" && extra.nameAr ? extra.nameAr : extra.name,
       price: Number(extra.price),
     })), ...("optionGroups" in product ? product.optionGroups.flatMap(({group})=>group.options.filter(({option})=>option.isAvailable).map(({option})=>({id:option.id,name:locale==="ar"&&option.nameAr?option.nameAr:option.name,price:Number(option.priceAdjustment)}))) : [])],
-    optionGroups: "optionGroups" in product ? product.optionGroups.map(({group})=>({id:group.id,name:locale==="ar"&&group.nameAr?group.nameAr:group.name,required:group.isRequired,min:group.minSelections,max:group.maxSelections,options:group.options.filter(({option})=>option.isAvailable).map(({option})=>({id:option.id,name:locale==="ar"&&option.nameAr?option.nameAr:option.name,price:Number(option.priceAdjustment)}))})) : [],
+    optionGroups: "optionGroups" in product ? product.optionGroups.map(({group})=>{const options=group.options.filter(({option})=>option.isAvailable).map(({option})=>({id:option.id,name:locale==="ar"&&option.nameAr?option.nameAr:option.name,price:Number(option.priceAdjustment)}));return{id:group.id,name:locale==="ar"&&group.nameAr?group.nameAr:group.name,required:group.isRequired,min:group.isRequired?Math.max(1,group.minSelections):0,max:group.isRequired?group.maxSelections:options.length,options}}).filter((group)=>group.options.length>0) : [],
   }));
-  const reorder = (await searchParams).reorder ?? "";
+  const menuParams = await searchParams;
+  const reorder = menuParams.reorder ?? "";
   const availableIds = new Set(products.filter((product) => product.available).map((product) => product.id));
   const initialCart = Object.fromEntries(reorder.split(",").map((part) => part.split(":" as const)).filter(([id,quantity]) => availableIds.has(id) && Number.isInteger(Number(quantity)) && Number(quantity) > 0).map(([id,quantity]) => [id, Math.min(99, Number(quantity))]));
+  const requestedExtras = new Set((menuParams.extras ?? "").split(",").filter(Boolean));
+  const initialSelectedExtras = Object.fromEntries(
+    products
+      .filter((product) => initialCart[product.id])
+      .map((product) => [
+        product.id,
+        product.extras
+          .filter((extra) => requestedExtras.has(extra.id))
+          .map((extra) => extra.id),
+      ]),
+  );
   const session = await auth();
   const customerDefaults = !isDemo && session?.user.roles.includes("CUSTOMER") ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, phone: true, customerProfile: { select: { addresses: { where: { isDefault: true }, take: 1, select: { address: true } } } } } }) : null;
   const address = restaurant.address || branch?.address;
@@ -245,6 +257,8 @@ export default async function MenuPage({
           products={products}
           orderingEnabled={accepting}
           initialCart={initialCart}
+          initialSelectedExtras={initialSelectedExtras}
+          initialOpen={menuParams.checkout === "1" && Object.keys(initialCart).length > 0}
           customerDefaults={customerDefaults ? { name: customerDefaults.name, phone: customerDefaults.phone ?? "", address: customerDefaults.customerProfile?.addresses[0]?.address ?? "" } : undefined}
           demo={isDemo}
         />

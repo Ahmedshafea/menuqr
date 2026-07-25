@@ -12,6 +12,8 @@ import {
 import { CloseDetailsButton } from "@/components/close-details-button";
 import { ProductImportDialog } from "@/components/product-import-dialog";
 import { DeleteProductButton } from "@/components/delete-product-button";
+import { ProductOptionsEditor } from "@/components/product-options-editor";
+import { parseProductOptions, syncProductOptions } from "@/lib/product-options";
 
 export const dynamic = "force-dynamic";
 
@@ -28,16 +30,19 @@ export default async function MenuManagementPage({
     menuText,
     toolsText,
     productText,
+    formOptionsText,
     common,
     locale,
     restaurant,
     categories,
     products,
     totalProducts,
+    reusableOptions,
   ] = await Promise.all([
     getTranslations("menuAdmin"),
     getTranslations("productTools"),
     getTranslations("mvpPolish.products"),
+    getTranslations("productFormOptions"),
     getTranslations("common"),
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
@@ -65,6 +70,7 @@ export default async function MenuManagementPage({
         category: true,
         images: { orderBy: { sortOrder: "asc" }, take: 1 },
         extras: true,
+        optionGroups:{orderBy:{sortOrder:"asc"},include:{group:{include:{options:{orderBy:{sortOrder:"asc"},include:{option:true}}}}}},
       },
       orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
       skip: (page - 1) * take,
@@ -83,6 +89,7 @@ export default async function MenuManagementPage({
           : {}),
       },
     }),
+    prisma.productOption.findMany({where:{restaurantId},orderBy:[{name:"asc"}],select:{id:true,name:true,nameAr:true,priceAdjustment:true}}),
   ]);
   const productToolKeys = new Set([
     "replaceImage",
@@ -117,6 +124,7 @@ export default async function MenuManagementPage({
     const newCategory = String(form.get("newCategory") ?? "").trim();
     const newCategoryAr = String(form.get("newCategoryAr") ?? "").trim();
     const imageFile = form.get("image");
+    const productOptions = parseProductOptions(form.get("productOptions"));
     if (
       name.length < 2 ||
       !Number.isFinite(price) ||
@@ -153,7 +161,7 @@ export default async function MenuManagementPage({
           });
           categoryId = category.id;
         }
-        await tx.product.create({
+        const createdProduct = await tx.product.create({
           data: {
             restaurantId,
             categoryId,
@@ -183,6 +191,7 @@ export default async function MenuManagementPage({
               : {}),
           },
         });
+        await syncProductOptions(tx, restaurantId, createdProduct.id, productOptions);
       });
     } catch (error) {
       if (uploaded)
@@ -268,6 +277,7 @@ export default async function MenuManagementPage({
     const nameAr = String(form.get("nameAr") ?? "").trim();
     const price = Number(form.get("price"));
     const stockText = String(form.get("stock") ?? "").trim();
+    const productOptions = parseProductOptions(form.get("productOptions"));
     const [product, category] = await Promise.all([
       prisma.product.findFirst({
         where: { id, restaurantId },
@@ -301,34 +311,39 @@ export default async function MenuManagementPage({
           })
         : null;
     try {
-      await prisma.product.update({
-        where: { id },
-        data: {
-          categoryId,
-          name,
-          nameAr: nameAr || null,
-          description: String(form.get("description") ?? "").trim() || null,
-          descriptionAr: String(form.get("descriptionAr") ?? "").trim() || null,
-          price,
-          stock: stockText
-            ? Math.max(0, Number.parseInt(stockText, 10) || 0)
-            : null,
-          isAvailable: form.get("isAvailable") === "on",
-          availability: form.get("isAvailable") === "on" ? "AVAILABLE" : "HIDDEN",
-          isFeatured: form.get("isFeatured") === "on",
-          ...(uploaded
-            ? {
-                images: {
-                  deleteMany: {},
-                  create: {
-                    url: uploaded.url,
-                    publicId: uploaded.path,
-                    alt: name,
+      await prisma.$transaction(async (tx) => {
+        await tx.product.update({
+          where: { id },
+          data: {
+            categoryId,
+            name,
+            nameAr: nameAr || null,
+            description: String(form.get("description") ?? "").trim() || null,
+            descriptionAr:
+              String(form.get("descriptionAr") ?? "").trim() || null,
+            price,
+            stock: stockText
+              ? Math.max(0, Number.parseInt(stockText, 10) || 0)
+              : null,
+            isAvailable: form.get("isAvailable") === "on",
+            availability:
+              form.get("isAvailable") === "on" ? "AVAILABLE" : "HIDDEN",
+            isFeatured: form.get("isFeatured") === "on",
+            ...(uploaded
+              ? {
+                  images: {
+                    deleteMany: {},
+                    create: {
+                      url: uploaded.url,
+                      publicId: uploaded.path,
+                      alt: name,
+                    },
                   },
-                },
-              }
-            : {}),
-        },
+                }
+              : {}),
+          },
+        });
+        await syncProductOptions(tx, restaurantId, id, productOptions);
       });
       if (uploaded)
         await Promise.all(
@@ -514,6 +529,49 @@ export default async function MenuManagementPage({
           {toolsText("featured")}
         </label>
       )}
+      <ProductOptionsEditor
+        existingOptions={reusableOptions.map((option) => ({
+          id: option.id,
+          name: option.name,
+          nameAr: option.nameAr,
+          price: Number(option.priceAdjustment),
+        }))}
+        initialGroups={
+          product?.optionGroups.map(({ group }) => ({
+            id: group.id,
+            name: group.name,
+            nameAr: group.nameAr ?? undefined,
+            required: group.isRequired,
+            min: group.minSelections,
+            max: group.maxSelections,
+            options: group.options.map(({ option }) => ({
+              id: option.id,
+              name: option.name,
+              nameAr: option.nameAr ?? undefined,
+              price: Number(option.priceAdjustment),
+            })),
+          })) ?? []
+        }
+        labels={{
+          title: formOptionsText("title"),
+          help: formOptionsText("help"),
+          addGroup: formOptionsText("addGroup"),
+          groupName: formOptionsText("groupName"),
+          groupNameAr: formOptionsText("groupNameAr"),
+          required: formOptionsText("required"),
+          optional: formOptionsText("optional"),
+          min: formOptionsText("min"),
+          max: formOptionsText("max"),
+          addOption: formOptionsText("addOption"),
+          createNew: formOptionsText("createNew"),
+          selectExisting: formOptionsText("selectExisting"),
+          optionName: formOptionsText("optionName"),
+          optionNameAr: formOptionsText("optionNameAr"),
+          price: formOptionsText("price"),
+          free: formOptionsText("free"),
+          remove: formOptionsText("remove"),
+        }}
+      />
     </>
   );
   return (

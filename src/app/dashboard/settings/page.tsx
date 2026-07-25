@@ -10,7 +10,7 @@ import { NotificationPreferences } from "@/components/notification-preferences";
 export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const { restaurantId } = await requireTenant();
-  const [t, common, qr, polish, mvp, notifications, fulfillment, restaurant] = await Promise.all([
+  const [t, common, qr, polish, mvp, notifications, fulfillment, pricing, restaurant] = await Promise.all([
     getTranslations("settings"),
     getTranslations("common"),
     getTranslations("qr"),
@@ -18,6 +18,7 @@ export default async function SettingsPage() {
     getTranslations("mvpPolish.qr"),
     getTranslations("mvpPolish.notifications"),
     getTranslations("restaurantWorkflow.settings"),
+    getTranslations("pricingSettings"),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
       include: {
@@ -51,6 +52,14 @@ export default async function SettingsPage() {
     ]);
     const name = String(form.get("name") || "").trim();
     const address = String(form.get("address") || "").trim();
+    const adjustmentType = (name: string) =>
+      form.get(name) === "PERCENTAGE" ? "PERCENTAGE" : "FIXED";
+    const adjustmentValue = (name: string, typeName: string) => {
+      const value = Math.max(0, Number(form.get(name)) || 0);
+      return adjustmentType(typeName) === "PERCENTAGE"
+        ? Math.min(100, value)
+        : value;
+    };
     await prisma.$transaction(async (tx) => {
       await tx.restaurant.update({
         where: { id: restaurantId },
@@ -116,6 +125,14 @@ export default async function SettingsPage() {
           offersDelivery: form.get("offersDelivery") === "on",
           offersPickup: form.get("offersPickup") === "on",
           offersDineIn: form.get("offersDineIn") === "on",
+          deliveryFee: adjustmentValue("deliveryFee", "deliveryFeeType"),
+          deliveryFeeType: adjustmentType("deliveryFeeType"),
+          serviceFee: adjustmentValue("serviceFee", "serviceFeeType"),
+          serviceFeeType: adjustmentType("serviceFeeType"),
+          taxRate: adjustmentValue("taxRate", "taxType"),
+          taxType: adjustmentType("taxType"),
+          discountValue: adjustmentValue("discountValue", "discountType"),
+          discountType: adjustmentType("discountType"),
         },
         update: {
           allowOrdering: form.get("allowOrdering") === "on",
@@ -127,6 +144,14 @@ export default async function SettingsPage() {
           offersDelivery: form.get("offersDelivery") === "on",
           offersPickup: form.get("offersPickup") === "on",
           offersDineIn: form.get("offersDineIn") === "on",
+          deliveryFee: adjustmentValue("deliveryFee", "deliveryFeeType"),
+          deliveryFeeType: adjustmentType("deliveryFeeType"),
+          serviceFee: adjustmentValue("serviceFee", "serviceFeeType"),
+          serviceFeeType: adjustmentType("serviceFeeType"),
+          taxRate: adjustmentValue("taxRate", "taxType"),
+          taxType: adjustmentType("taxType"),
+          discountValue: adjustmentValue("discountValue", "discountType"),
+          discountType: adjustmentType("discountType"),
         },
       });
     });
@@ -292,6 +317,68 @@ export default async function SettingsPage() {
                 <option value="en">English</option>
               </select>
             </label>
+          </div>
+        </div>
+        <div className="settings-section">
+          <h2>{pricing("title")}</h2>
+          <p>{pricing("description")}</p>
+          <div className="settings-grid pricing-settings-grid">
+            {[
+              {
+                key: "deliveryFee",
+                typeKey: "deliveryFeeType",
+                label: pricing("deliveryFee"),
+                value: Number(restaurant.settings?.deliveryFee ?? 0),
+                type: restaurant.settings?.deliveryFeeType ?? "FIXED",
+                help: pricing("deliveryHelp"),
+              },
+              {
+                key: "serviceFee",
+                typeKey: "serviceFeeType",
+                label: pricing("serviceFee"),
+                value: Number(restaurant.settings?.serviceFee ?? 0),
+                type: restaurant.settings?.serviceFeeType ?? "FIXED",
+                help: pricing("percentageHelp"),
+              },
+              {
+                key: "taxRate",
+                typeKey: "taxType",
+                label: pricing("tax"),
+                value: Number(restaurant.settings?.taxRate ?? 0),
+                type: restaurant.settings?.taxType ?? "PERCENTAGE",
+                help: pricing("percentageHelp"),
+              },
+              {
+                key: "discountValue",
+                typeKey: "discountType",
+                label: pricing("discount"),
+                value: Number(restaurant.settings?.discountValue ?? 0),
+                type: restaurant.settings?.discountType ?? "FIXED",
+                help: pricing("percentageHelp"),
+              },
+            ].map((item) => (
+              <fieldset className="pricing-adjustment" key={item.key}>
+                <legend>{item.label}</legend>
+                <label>
+                  {pricing("value")}
+                  <input
+                    name={item.key}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={item.value}
+                  />
+                </label>
+                <label>
+                  <span>{pricing("fixed")} / {pricing("percentage")}</span>
+                  <select name={item.typeKey} defaultValue={item.type}>
+                    <option value="FIXED">{pricing("fixed")}</option>
+                    <option value="PERCENTAGE">{pricing("percentage")}</option>
+                  </select>
+                </label>
+                <small>{item.help}</small>
+              </fieldset>
+            ))}
           </div>
         </div>
         <div className="settings-section">
