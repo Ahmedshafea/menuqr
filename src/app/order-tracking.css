@@ -190,6 +190,7 @@
   }
   .order-head {
     align-items: flex-start;
+    flex-direction: column;
     padding: 22px;
   }
   .order-head h1 {
@@ -199,6 +200,7 @@
     display: none;
   }
   .order-status {
+    max-width: 100%;
     white-space: nowrap;
   }
   .order-message {

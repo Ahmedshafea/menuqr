@@ -29,6 +29,8 @@ export function MenuClient({
   products,
   orderingEnabled = true,
   initialCart = {},
+  initialSelectedExtras = {},
+  initialOpen = false,
   customerDefaults,
   demo = false,
 }: {
@@ -36,6 +38,8 @@ export function MenuClient({
   products: MenuProduct[];
   orderingEnabled?: boolean;
   initialCart?: Record<string, number>;
+  initialSelectedExtras?: Record<string, string[]>;
+  initialOpen?: boolean;
   customerDefaults?: { name: string; phone: string; address: string };
   demo?: boolean;
 }) {
@@ -45,16 +49,24 @@ export function MenuClient({
   const productText = useTranslations("mvpPolish.products");
   const demoText = useTranslations("demo");
   const validationText = useTranslations("restaurantWorkflow.validation");
+  const optionText = useTranslations("productFormOptions");
   const locale = useLocale();
+  const defaultFulfillment = restaurant.fulfillment.delivery
+    ? "DELIVERY"
+    : restaurant.fulfillment.pickup
+      ? "PICKUP"
+      : "DINE_IN";
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("__all");
   const [cart, setCart] = useState<Record<string, number>>(initialCart);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [fulfillmentType, setFulfillmentType] = useState(defaultFulfillment);
   const [createAccount, setCreateAccount] = useState(false);
-  const [selectedExtras, setSelectedExtras] = useState<Record<string, string[]>>({});
+  const [selectedExtras, setSelectedExtras] =
+    useState<Record<string, string[]>>(initialSelectedExtras);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [demoPreview, setDemoPreview] = useState("");
   const categories = [...new Set(products.map((product) => product.category))];
@@ -85,6 +97,39 @@ export function MenuClient({
       ...current,
       [id]: Math.max(0, (current[id] || 0) + amount),
     }));
+  };
+  const toggleOption = (
+    product: MenuProduct,
+    group: MenuProduct["optionGroups"][number],
+    optionId: string,
+    checked: boolean,
+  ) => {
+    setSelectedExtras((current) => {
+      const selected = current[product.id] ?? [];
+      const groupIds = new Set(group.options.map((option) => option.id));
+      const outsideGroup = selected.filter((id) => !groupIds.has(id));
+      const selectedInGroup = selected.filter((id) => groupIds.has(id));
+
+      if (!checked) {
+        return {
+          ...current,
+          [product.id]: selected.filter((id) => id !== optionId),
+        };
+      }
+
+      const nextInGroup =
+        group.max === 1
+          ? [optionId]
+          : [...selectedInGroup.filter((id) => id !== optionId), optionId].slice(
+              0,
+              group.max,
+            );
+
+      return {
+        ...current,
+        [product.id]: [...outsideGroup, ...nextInGroup],
+      };
+    });
   };
   async function checkout(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,10 +185,15 @@ export function MenuClient({
     });
     const body = await response.json();
     if (!response.ok) {
+      const code = body.error?.code;
       setError(
-        typeof body.error === "string"
+        code === "INVALID_ORDER"
+          ? t("invalidOrder")
+          : code === "TURNSTILE_FAILED"
+            ? t("verificationFailed")
+            : typeof body.error === "string"
           ? body.error
-          : (body.error?.code ?? common("noData")),
+          : (code ?? common("noData")),
       );
       setLoading(false);
       return;
@@ -284,27 +334,114 @@ export function MenuClient({
                       {cart[product.id]} × {product.name}
                     </span>
                     <b>{money(Math.max(0,product.price + product.extras.filter((extra) => selectedExtras[product.id]?.includes(extra.id)).reduce((sum, extra) => sum + extra.price, 0)) * cart[product.id])}</b>
-                    {product.extras.length > 0 && (
+                    {product.optionGroups.map((group) => (
+                      <fieldset className="customer-option-group" key={group.id}>
+                        <legend>
+                          <span>{group.name}</span>
+                          <small>
+                            {group.required
+                              ? optionText("required")
+                              : optionText("optional")}
+                            {" · "}
+                            {optionText("selectionLimit", {
+                              min: group.min,
+                              max: group.max,
+                            })}
+                          </small>
+                        </legend>
+                        {group.options.map((option) => {
+                          const selected =
+                            selectedExtras[product.id]?.includes(option.id) ??
+                            false;
+                          const selectedCount = group.options.filter((item) =>
+                            selectedExtras[product.id]?.includes(item.id),
+                          ).length;
+                          const atLimit =
+                            !selected &&
+                            group.max > 1 &&
+                            selectedCount >= group.max;
+
+                          return (
+                            <label key={option.id}>
+                              <input
+                                type={
+                                  group.required && group.max === 1
+                                    ? "radio"
+                                    : "checkbox"
+                                }
+                                name={`option-${product.id}-${group.id}`}
+                                checked={selected}
+                                disabled={atLimit}
+                                onChange={(event) =>
+                                  toggleOption(
+                                    product,
+                                    group,
+                                    option.id,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              <span>{option.name}</span>
+                              <small>
+                                {option.price === 0
+                                  ? optionText("free")
+                                  : `${option.price > 0 ? "+" : "−"} ${money(Math.abs(option.price))}`}
+                              </small>
+                            </label>
+                          );
+                        })}
+                      </fieldset>
+                    ))}
+                    {product.extras.filter(
+                      (extra) =>
+                        !product.optionGroups.some((group) =>
+                          group.options.some(
+                            (option) => option.id === extra.id,
+                          ),
+                        ),
+                    ).length > 0 && (
                       <fieldset>
                         <legend>{demoText("extras")}</legend>
-                        {product.extras.map((extra) => (
-                          <label key={extra.id}>
-                            <input
-                              type="checkbox"
-                              checked={selectedExtras[product.id]?.includes(extra.id) ?? false}
-                              onChange={(event) =>
-                                setSelectedExtras((current) => ({
-                                  ...current,
-                                  [product.id]: event.target.checked
-                                    ? [...(current[product.id] ?? []), extra.id]
-                                    : (current[product.id] ?? []).filter((id) => id !== extra.id),
-                                }))
-                              }
-                            />
-                            <span>{extra.name}</span>
-                            <small>+ {money(extra.price)}</small>
-                          </label>
-                        ))}
+                        {product.extras
+                          .filter(
+                            (extra) =>
+                              !product.optionGroups.some((group) =>
+                                group.options.some(
+                                  (option) => option.id === extra.id,
+                                ),
+                              ),
+                          )
+                          .map((extra) => (
+                            <label key={extra.id}>
+                              <input
+                                type="checkbox"
+                                checked={
+                                  selectedExtras[product.id]?.includes(
+                                    extra.id,
+                                  ) ?? false
+                                }
+                                onChange={(event) =>
+                                  setSelectedExtras((current) => ({
+                                    ...current,
+                                    [product.id]: event.target.checked
+                                      ? [
+                                          ...(current[product.id] ?? []),
+                                          extra.id,
+                                        ]
+                                      : (current[product.id] ?? []).filter(
+                                          (id) => id !== extra.id,
+                                        ),
+                                  }))
+                                }
+                              />
+                              <span>{extra.name}</span>
+                              <small>
+                                {extra.price === 0
+                                  ? optionText("free")
+                                  : `${extra.price > 0 ? "+" : "−"} ${money(Math.abs(extra.price))}`}
+                              </small>
+                            </label>
+                          ))}
                       </fieldset>
                     )}
                   </div>
@@ -315,10 +452,10 @@ export function MenuClient({
               <strong>{money(total)}</strong>
             </div>
             <form onSubmit={checkout}>
-              <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" defaultChecked/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" defaultChecked={!restaurant.fulfillment.delivery}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" defaultChecked={!restaurant.fulfillment.delivery&&!restaurant.fulfillment.pickup}/>{demoText("dineIn")}</label>}</div>
+              <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" checked={fulfillmentType==="DELIVERY"} onChange={()=>setFulfillmentType("DELIVERY")}/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" checked={fulfillmentType==="PICKUP"} onChange={()=>setFulfillmentType("PICKUP")}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" checked={fulfillmentType==="DINE_IN"} onChange={()=>setFulfillmentType("DINE_IN")}/>{demoText("dineIn")}</label>}</div>
               <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
               <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
-              <input name="address" placeholder={t("address")} defaultValue={customerDefaults?.address} />
+              <input name="address" required={fulfillmentType==="DELIVERY"} placeholder={fulfillmentType==="DELIVERY"?t("addressRequired"):t("address")} defaultValue={customerDefaults?.address} />
               <textarea name="notes" placeholder={t("notes")} />
               {!demo && !customerDefaults && <section className="checkout-account-choice">
                 <h3>{accountT("saveInfoTitle")}</h3>

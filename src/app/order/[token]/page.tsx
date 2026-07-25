@@ -5,13 +5,17 @@ import { headers } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { Gift, History, MessageCircle, Minus, Phone, Plus, RefreshCw, Store, Trash2, UserRound } from "lucide-react";
+import { Copy, Gift, History, MessageCircle, Minus, Phone, Plus, RefreshCw, Store, Trash2, UserRound } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { whatsappUrl } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { recalculateOrder, requireManagedOrder } from "@/lib/order-management";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
+import {
+  CustomerQuickActions,
+  OrderPrintActions,
+} from "@/components/order-workspace-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -48,13 +52,13 @@ export default async function OrderTrackingPage({
             logoUrl: true,
             whatsapp: true,
             currency: true,
-            products: { where: { isAvailable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, nameAr: true, price: true } },
+            products: { where: { isAvailable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, nameAr: true, price: true, optionGroups:{select:{group:{select:{options:{select:{option:{select:{id:true,name:true,nameAr:true,priceAdjustment:true,isAvailable:true}}}}}}}} } },
             drivers:{orderBy:{name:"asc"},select:{id:true,name:true,status:true}},
           },
         },
-        items: { select: { id: true, productName: true, unitPrice: true, quantity: true, notes: true, isComplimentary: true, extras: { select: { id: true, name: true, price: true } },options:{select:{id:true,name:true,price:true}} } },
+        items: { select: { id: true, productId:true, productName: true, unitPrice: true, quantity: true, notes: true, isComplimentary: true, product:{select:{images:{orderBy:{sortOrder:"asc"},take:1,select:{url:true}}}}, extras: { select: { id: true, name: true, price: true, extraId:true } },options:{select:{id:true,name:true,price:true,optionId:true}} } },
         driver:{select:{id:true,name:true,phone:true,whatsapp:true,photoUrl:true,vehicleType:true,status:true}},
-        review:{select:{id:true}},
+        review:{select:{id:true,foodQuality:true,deliverySpeed:true,packaging:true,overall:true,comment:true,status:true}},
         messages: {
           orderBy: { createdAt: "asc" },
           select: { id: true, body: true, sender: true, createdAt: true },
@@ -70,6 +74,18 @@ export default async function OrderTrackingPage({
     session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)),
   );
   const isLinkedCustomer = session?.user.id === order.customerUserId;
+  const customerMetrics = isRestaurant
+    ? await prisma.order.aggregate({
+        where: {
+          restaurantId: order.restaurantId,
+          ...(order.customerUserId
+            ? { customerUserId: order.customerUserId }
+            : { customerPhone: order.customerPhone }),
+        },
+        _count: { _all: true },
+        _sum: { total: true },
+      })
+    : null;
   const restaurantName =
     locale === "ar" && order.restaurant.nameAr
       ? order.restaurant.nameAr
@@ -249,6 +265,212 @@ export default async function OrderTrackingPage({
     redirect(`/order/${token}?toast=orderUpdated`);
   }
 
+  async function duplicateItem(form: FormData) {
+    "use server";
+    const { order, session } = await requireManagedOrder(token);
+    const itemId = String(form.get("itemId") ?? "");
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.orderItem.findFirst({
+        where: { id: itemId, orderId: order.id },
+        include: { extras: true, options: true },
+      });
+      if (!item) return;
+      await tx.orderItem.create({
+        data: {
+          orderId: order.id,
+          productId: item.productId,
+          productName: item.productName,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          notes: item.notes,
+          isComplimentary: item.isComplimentary,
+          extras: {
+            create: item.extras.map((extra) => ({
+              name: extra.name,
+              price: extra.price,
+              extraId: extra.extraId,
+            })),
+          },
+          options: {
+            create: item.options.map((option) => ({
+              name: option.name,
+              price: option.price,
+              optionId: option.optionId,
+            })),
+          },
+        },
+      });
+      await recalculateOrder(tx, order.id);
+      await tx.orderActionLog.create({
+        data: {
+          orderId: order.id,
+          userId: session.user.id,
+          action: "ITEM_DUPLICATED",
+          details: { item: item.productName },
+        },
+      });
+    });
+    revalidatePath(`/order/${token}`);
+  }
+
+  async function editItemOptions(form: FormData) {
+    "use server";
+    const { order, session } = await requireManagedOrder(token);
+    const itemId = String(form.get("itemId") ?? "");
+    const requestedIds = new Set(
+      form.getAll("optionId").map((value) => String(value)),
+    );
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.orderItem.findFirst({
+        where: { id: itemId, orderId: order.id, productId: { not: null } },
+        select: {
+          id: true,
+          productId: true,
+          productName: true,
+          extras: { select: { price: true } },
+        },
+      });
+      if (!item?.productId) return;
+      const product = await tx.product.findFirst({
+        where: { id: item.productId, restaurantId: order.restaurantId },
+        select: {
+          price: true,
+          optionGroups: {
+            select: {
+              group: {
+                select: {
+                  options: {
+                    select: {
+                      option: {
+                        select: {
+                          id: true,
+                          name: true,
+                          nameAr: true,
+                          priceAdjustment: true,
+                          isAvailable: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!product) return;
+      const available = product.optionGroups
+        .flatMap(({ group }) => group.options.map(({ option }) => option))
+        .filter((option) => option.isAvailable);
+      const selected = available.filter((option) => requestedIds.has(option.id));
+      const extrasTotal = item.extras.reduce(
+        (sum, extra) => sum + Number(extra.price),
+        0,
+      );
+      await tx.orderItem.update({
+        where: { id: item.id },
+        data: {
+          unitPrice:
+            Number(product.price) +
+            extrasTotal +
+            selected.reduce(
+              (sum, option) => sum + Number(option.priceAdjustment),
+              0,
+            ),
+          options: {
+            deleteMany: {},
+            create: selected.map((option) => ({
+              optionId: option.id,
+              name: option.nameAr || option.name,
+              price: option.priceAdjustment,
+            })),
+          },
+        },
+      });
+      await recalculateOrder(tx, order.id);
+      await tx.orderActionLog.create({
+        data: {
+          orderId: order.id,
+          userId: session.user.id,
+          action: "ITEM_OPTIONS_UPDATED",
+          details: { item: item.productName, count: selected.length },
+        },
+      });
+    });
+    revalidatePath(`/order/${token}`);
+  }
+
+  async function updateStatus(form: FormData) {
+    "use server";
+    const { order, session } = await requireManagedOrder(token);
+    const next = String(form.get("status"));
+    const allowed = [
+      "CONFIRMED",
+      "PREPARING",
+      "READY",
+      "OUT_FOR_DELIVERY",
+      "DELIVERED",
+      "COMPLETED",
+      "CANCELLED",
+      "REJECTED",
+      "FAILED_DELIVERY",
+    ] as const;
+    if (!allowed.includes(next as (typeof allowed)[number])) return;
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: next as (typeof allowed)[number],
+          ...(next === "OUT_FOR_DELIVERY"
+            ? { outForDeliveryAt: new Date() }
+            : {}),
+          ...(next === "DELIVERED" ? { deliveredAt: new Date() } : {}),
+        },
+      });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: next as (typeof allowed)[number],
+          userId: session.user.id,
+        },
+      });
+      await tx.orderActionLog.create({
+        data: {
+          orderId: order.id,
+          userId: session.user.id,
+          action: "STATUS_CHANGED",
+          details: { from: order.status, to: next },
+        },
+      });
+      if (
+        order.driverId &&
+        ["DELIVERED", "COMPLETED", "CANCELLED", "FAILED_DELIVERY"].includes(
+          next,
+        )
+      )
+        await tx.deliveryDriver.update({
+          where: { id: order.driverId },
+          data: { status: "AVAILABLE" },
+        });
+    });
+    revalidatePath(`/order/${token}`);
+  }
+
+  async function moderateReview(form: FormData) {
+    "use server";
+    const { order } = await requireManagedOrder(token);
+    const status = String(form.get("status"));
+    if (!["PUBLISHED", "HIDDEN"].includes(status)) return;
+    await prisma.restaurantReview.updateMany({
+      where: { orderId: order.id, restaurantId: order.restaurantId },
+      data: {
+        status: status as "PUBLISHED" | "HIDDEN",
+        publishedAt: status === "PUBLISHED" ? new Date() : null,
+      },
+    });
+    revalidatePath(`/order/${token}`);
+  }
+
   async function sendApprovalRequest() {
     "use server";
     const { order, session } = await requireManagedOrder(token);
@@ -273,6 +495,32 @@ export default async function OrderTrackingPage({
   async function assignDriver(form:FormData){"use server";const{order,session}=await requireManagedOrder(token);const driverId=String(form.get("driverId"));const driver=await prisma.deliveryDriver.findFirst({where:{id:driverId,restaurantId:order.restaurantId,status:{not:"OFFLINE"}},select:{id:true,name:true}});if(!driver)return;await prisma.$transaction(async tx=>{await tx.order.update({where:{id:order.id},data:{driverId:driver.id,status:"ASSIGNED_TO_DRIVER",driverAssignedAt:new Date()}});await tx.deliveryDriver.update({where:{id:driver.id},data:{status:"BUSY"}});await tx.orderStatusHistory.create({data:{orderId:order.id,status:"ASSIGNED_TO_DRIVER",userId:session.user.id}});await tx.orderActionLog.create({data:{orderId:order.id,userId:session.user.id,action:"DRIVER_ASSIGNED",details:{driver:driver.name}}});await createRestaurantNotification(tx,{restaurantId:order.restaurantId,type:"DRIVER_ASSIGNED",title:"Driver assigned",body:driver.name,href:`/order/${token}`,dedupeKey:`driver:${order.id}:${Date.now()}`})});revalidatePath(`/order/${token}`);}
   async function submitReview(form:FormData){"use server";const current=await prisma.order.findUnique({where:{accessToken:token},select:{id:true,restaurantId:true,customerUserId:true,status:true,review:{select:{id:true}}}});if(!current||current.status!=="COMPLETED"||current.review)return;const score=(key:string)=>Math.max(1,Math.min(5,Number(form.get(key))||0));const overall=score("overall");if(!overall)return;await prisma.$transaction(async tx=>{await tx.restaurantReview.create({data:{restaurantId:current.restaurantId,orderId:current.id,customerUserId:current.customerUserId,foodQuality:score("foodQuality"),deliverySpeed:score("deliverySpeed"),packaging:score("packaging"),overall,comment:String(form.get("comment")||"").trim().slice(0,1000)||null}});await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"NEW_REVIEW",title:overall<=2?"Low customer rating":"New customer review",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`review:${current.id}`});if(overall<=2)await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"LOW_RATING",title:"Low customer rating",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`low-review:${current.id}`})});revalidatePath(`/order/${token}`);}
 
+  const timelineStatuses = [
+    "NEW",
+    "CONFIRMED",
+    "PREPARING",
+    "READY",
+    ...(order.fulfillmentType === "DELIVERY"
+      ? ["ASSIGNED_TO_DRIVER", "OUT_FOR_DELIVERY", "DELIVERED"]
+      : []),
+    "COMPLETED",
+  ];
+  const terminalStatuses = ["CANCELLED", "REJECTED", "FAILED_DELIVERY"];
+  if (terminalStatuses.includes(order.status))
+    timelineStatuses.push(order.status);
+  const manageableStatuses = [
+    "CONFIRMED",
+    "PREPARING",
+    "READY",
+    ...(order.fulfillmentType === "DELIVERY"
+      ? ["OUT_FOR_DELIVERY", "DELIVERED"]
+      : []),
+    "COMPLETED",
+    "REJECTED",
+    "CANCELLED",
+    ...(order.fulfillmentType === "DELIVERY" ? ["FAILED_DELIVERY"] : []),
+  ].filter((status) => status !== order.status);
+
   return (
     <main className="order-tracking">
       <div className="order-shell">
@@ -296,12 +544,97 @@ export default async function OrderTrackingPage({
             {flow(`statuses.${order.status}`)}
           </span>
         </header>
+        {isRestaurant && (
+          <section className="order-command-bar order-status-control">
+            <div className="current-order-state">
+              <small>{t("currentStatus")}</small>
+              <strong>{t(`statuses.${order.status}`)}</strong>
+            </div>
+            <form action={updateStatus}>
+              <label>
+                {t("orderActions")}
+                <select name="status" defaultValue="">
+                  <option value="" disabled>{t("chooseStatus")}</option>
+                  {manageableStatuses.map((status) => (
+                    <option value={status} key={status}>
+                      {t(`statuses.${status}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="button primary">{t("applyStatus")}</button>
+            </form>
+            <OrderPrintActions
+              receipt={t("printReceipt")}
+              kitchen={t("printKitchen")}
+              restaurant={{
+                name: restaurantName,
+                logoUrl: order.restaurant.logoUrl,
+              }}
+              order={{
+                number: order.orderNumber,
+                date: new Intl.DateTimeFormat(locale, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(order.createdAt),
+                customer: order.customerName,
+                phone: order.customerPhone,
+                address: order.deliveryAddress,
+                currency: order.restaurant.currency,
+                locale,
+                subtotal: Number(order.subtotal),
+                discount: Number(order.discountAmount),
+                deliveryFee: Number(order.deliveryFee),
+                serviceFee: Number(order.serviceFee),
+                tax: Number(order.taxAmount),
+                total: Number(order.total),
+                items: order.items.map((item) => ({
+                  name: item.productName,
+                  quantity: item.quantity,
+                  unitPrice: Number(item.unitPrice),
+                  notes: item.notes,
+                  options: [
+                    ...item.extras.map((extra) => extra.name),
+                    ...item.options.map((option) => option.name),
+                  ],
+                })),
+              }}
+              labels={{
+                invoice: t("invoice"),
+                kitchenTicket: t("kitchenTicket"),
+                customer: t("customer"),
+                phone: t("phone"),
+                address: t("address"),
+                item: t("items"),
+                quantity: t("quantity"),
+                unitPrice: t("unitPrice"),
+                subtotal: t("subtotal"),
+                discount: t("discount"),
+                deliveryFee: t("deliveryFee"),
+                serviceFee: t("serviceFee"),
+                tax: t("tax"),
+                total: t("total"),
+                notes: t("notes"),
+              }}
+            />
+          </section>
+        )}
         <section className="order-layout">
           <div className="order-column">
             <article className="order-card">
               <h2>{t("items")}</h2>
               {order.items.map((item) => (
                 <div className="tracking-item" key={item.id}>
+                  <span
+                    className="order-item-image"
+                    style={
+                      item.product?.images[0]?.url
+                        ? {
+                            backgroundImage: `url(${item.product.images[0].url})`,
+                          }
+                        : undefined
+                    }
+                  />
                   <span>
                     <b>
                       {item.quantity} × {item.productName}
@@ -320,21 +653,28 @@ export default async function OrderTrackingPage({
                   {isRestaurant && <div className="order-item-management">
                     <form action={changeQuantity}><input type="hidden" name="itemId" value={item.id}/><button name="delta" value="-1" title={flow("decrease")}><Minus /></button><button name="delta" value="1" title={flow("increase")}><Plus /></button></form>
                     <form action={removeItem}><input type="hidden" name="itemId" value={item.id}/><button className="danger-action" title={flow("remove")}><Trash2 /></button></form>
+                    <form action={duplicateItem}><input type="hidden" name="itemId" value={item.id}/><button title={t("duplicate")}><Copy /></button></form>
                     <form action={replaceItem} className="replace-item-form"><input type="hidden" name="itemId" value={item.id}/><select name="productId" aria-label={flow("replaceWith")}>{order.restaurant.products.map(product=><option value={product.id} key={product.id}>{locale==="ar"&&product.nameAr?product.nameAr:product.name}</option>)}</select><button title={flow("replace")}><RefreshCw /></button></form>
                     <form action={updateItemNotes} className="item-notes-form"><input type="hidden" name="itemId" value={item.id}/><input name="notes" defaultValue={item.notes??""} placeholder={flow("itemNotes")} maxLength={500}/><button>{flow("addNotes")}</button></form>
+                    {item.productId&&order.restaurant.products.some(product=>product.id===item.productId&&product.optionGroups.some(({group})=>group.options.some(({option})=>option.isAvailable)))&&<details className="edit-item-options"><summary>{t("editOptions")}</summary><form action={editItemOptions}><input type="hidden" name="itemId" value={item.id}/>{order.restaurant.products.find(product=>product.id===item.productId)?.optionGroups.flatMap(({group})=>group.options).filter(({option})=>option.isAvailable).map(({option})=><label key={option.id}><input type="checkbox" name="optionId" value={option.id} defaultChecked={item.options.some(selected=>selected.optionId===option.id)}/><span>{locale==="ar"&&option.nameAr?option.nameAr:option.name}</span><small>{Number(option.priceAdjustment)>=0?"+":""}{money(Number(option.priceAdjustment))}</small></label>)}<button className="button primary">{t("saveOptions")}</button></form></details>}
                   </div>}
                 </div>
               ))}
               {isRestaurant && <form action={addComplimentary} className="complimentary-form"><select name="productId">{order.restaurant.products.map(product=><option value={product.id} key={product.id}>{locale==="ar"&&product.nameAr?product.nameAr:product.name}</option>)}</select><button className="button ghost"><Gift />{flow("complimentary")}</button></form>}
-              <div className="tracking-total">
-                <span>{t("total")}</span>
-                <strong>{money(Number(order.total))}</strong>
+              <div className="order-pricing-summary">
+                <p><span>{t("subtotal")}</span><b>{money(Number(order.subtotal))}</b></p>
+                <p><span>{t("discount")}</span><b>- {money(Number(order.discountAmount))}</b></p>
+                <p><span>{t("deliveryFee")}</span><b>{money(Number(order.deliveryFee))}</b></p>
+                <p><span>{t("serviceFee")}</span><b>{money(Number(order.serviceFee))}</b></p>
+                <p><span>{t("tax")}</span><b>{money(Number(order.taxAmount))}</b></p>
+                <p className="tracking-total"><span>{t("total")}</span><strong>{money(Number(order.total))}</strong></p>
               </div>
               {isRestaurant && <form action={sendApprovalRequest}><button className="button whatsapp-button approval-button"><MessageCircle />{flow("sendApproval")}</button></form>}
               {isRestaurant&&order.fulfillmentType==="DELIVERY"&&<form action={assignDriver} className="driver-assignment"><select name="driverId" defaultValue={order.driverId??""}><option value="">{deliveryText("assign")}</option>{order.restaurant.drivers.filter(driver=>driver.status!=="OFFLINE"||driver.id===order.driverId).map(driver=><option key={driver.id} value={driver.id}>{driver.name} · {deliveryText(driver.status.toLowerCase() as "available"|"busy"|"offline")}</option>)}</select><button className="button primary">{deliveryText("assign")}</button></form>}
             </article>
             {order.driver&&<article className="order-card driver-public-card">{order.driver.photoUrl&&<span style={{backgroundImage:`url(${order.driver.photoUrl})`}}/>}<div><h2>{order.driver.name}</h2><p>{order.driver.vehicleType}</p><a href={`tel:${order.driver.phone}`}>{order.driver.phone}</a>{order.driver.whatsapp&&<a className="button whatsapp-button" href={`https://wa.me/${order.driver.whatsapp}`}>{deliveryText("whatsapp")}</a>}{order.estimatedArrivalAt&&<small>{deliveryText("eta")}: {new Intl.DateTimeFormat(locale,{timeStyle:"short"}).format(order.estimatedArrivalAt)}</small>}</div></article>}
             {order.status==="COMPLETED"&&!order.review&&<article className="order-card"><h2>{reviewText("title")}</h2><form action={submitReview} className="review-form">{[["foodQuality","food"],["deliverySpeed","speed"],["packaging","packaging"],["overall","overall"]].map(([name,key])=><label key={name}>{reviewText(key as "food"|"speed"|"packaging"|"overall")}<select name={name} required defaultValue="5">{[5,4,3,2,1].map(value=><option key={value} value={value}>{"★".repeat(value)}</option>)}</select></label>)}<textarea name="comment" maxLength={1000} placeholder={reviewText("comment")}/><button className="button primary">{reviewText("submit")}</button></form></article>}
+            {isRestaurant&&order.review&&<article className="order-card order-review-card"><header><h2>{t("rating")}</h2><span>{t(order.review.status==="PUBLISHED"?"published":order.review.status==="HIDDEN"?"hidden":"pendingReview")}</span></header><div><p><b>{order.review.foodQuality}/5</b>{t("foodRating")}</p><p><b>{order.review.deliverySpeed}/5</b>{t("deliveryRating")}</p><p><b>{order.review.packaging}/5</b>{t("packagingRating")}</p><p><b>{order.review.overall}/5</b>{t("overallRating")}</p></div>{order.review.comment&&<blockquote>{order.review.comment}</blockquote>}<form action={moderateReview}><button name="status" value="PUBLISHED" className="button primary">{t("publish")}</button><button name="status" value="HIDDEN" className="button ghost">{t("hide")}</button></form></article>}
             <article className="order-card">
               <h2>{t("conversation")}</h2>
               <div className="order-messages">
@@ -380,8 +720,13 @@ export default async function OrderTrackingPage({
             </article>
           </div>
           <aside className="order-column">
-            <article className="order-card order-details">
-              <h2>{t("customer")}</h2>
+            <details className="order-card order-details customer-details" open>
+              <summary>
+                <h2>{t("customer")}</h2>
+                <span className={order.customerUserId ? "saved-customer" : "guest-customer"}>
+                  {order.customerUserId ? t("savedCustomer") : t("guestCustomer")}
+                </span>
+              </summary>
               <p>
                 <UserRound />
                 {order.customerName}
@@ -400,25 +745,32 @@ export default async function OrderTrackingPage({
                   <b>{t("notes")}:</b> {order.notes}
                 </p>
               )}
-              {isRestaurant && (
-                <a
-                  className="button whatsapp-button"
-                  href={whatsappUrl(
-                    order.customerPhone,
-                    `${restaurantName} - ${order.orderNumber}`,
-                  )}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <MessageCircle />
-                  {t("contactCustomer")}
-                </a>
+              {customerMetrics && (
+                <div className="customer-metrics">
+                  <span><b>{customerMetrics._count._all}</b>{t("orderCount")}</span>
+                  <span><b>{money(Number(customerMetrics._sum.total ?? 0))}</b>{t("totalSpending")}</span>
+                </div>
               )}
-            </article>
+              {isRestaurant && (
+                <CustomerQuickActions
+                  phone={order.customerPhone}
+                  address={order.deliveryAddress}
+                  labels={{
+                    call: t("call"),
+                    whatsapp: t("whatsapp"),
+                    copyAddress: t("copyAddress"),
+                    maps: t("openMaps"),
+                  }}
+                />
+              )}
+            </details>
             <article className="order-card">
               <h2><History />{flow("timeline")}</h2>
               <div className="order-timeline">
-                {order.statusHistory.map(entry=><div className={`timeline-entry status-${entry.status.toLowerCase()}`} key={entry.id}><i /><time>{new Intl.DateTimeFormat(locale,{hour:"2-digit",minute:"2-digit"}).format(entry.createdAt)}</time><strong>{flow(`statuses.${entry.status}`)}</strong></div>)}
+                {timelineStatuses.map((status) => {
+                  const entry = [...order.statusHistory].reverse().find((item) => item.status === status);
+                  return <div className={`timeline-entry ${entry ? `status-${status.toLowerCase()} completed-step` : "pending-step"}`} key={status}><i /><time>{entry ? new Intl.DateTimeFormat(locale,{hour:"2-digit",minute:"2-digit"}).format(entry.createdAt) : "—"}</time><strong>{t(`statuses.${status}`)}</strong></div>;
+                })}
               </div>
             </article>
             {isRestaurant && <article className="order-card"><h2>{flow("actionLog")}</h2><div className="order-action-log">{order.actionLogs.map(log=><div key={log.id}><span><b>{log.user?.name??restaurantName}</b>{flow.has(`actions.${log.action}`)?flow(`actions.${log.action}`):log.action}</span><time>{new Intl.DateTimeFormat(locale,{dateStyle:"short",timeStyle:"short"}).format(log.createdAt)}</time></div>)}</div></article>}

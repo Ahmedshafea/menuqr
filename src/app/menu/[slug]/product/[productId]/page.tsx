@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { ArrowLeft, Check, Plus } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { FavoriteProductButton } from "@/components/favorite-buttons";
 import { getDemoProduct } from "@/lib/demo-restaurants";
+import { ProductOrderOptions } from "@/components/product-order-options";
 
 export const revalidate = 60;
 
@@ -23,6 +24,19 @@ const getDatabaseProduct = unstable_cache(
         category: true,
         images: { orderBy: { sortOrder: "asc" } },
         extras: { where: { isAvailable: true } },
+        optionGroups: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            group: {
+              include: {
+                options: {
+                  orderBy: { sortOrder: "asc" },
+                  include: { option: true },
+                },
+              },
+            },
+          },
+        },
       },
     }),
   ["public-product"],
@@ -89,6 +103,49 @@ export default async function ProductPage({
     style: "currency",
     currency: product.restaurant.currency,
   });
+  const optionGroups = [
+    ...(product.extras.length
+      ? [
+          {
+            id: "legacy-extras",
+            name: t("extras"),
+            required: false,
+            min: 0,
+            max: product.extras.length,
+            options: product.extras.map((extra) => ({
+              id: extra.id,
+              name:
+                locale === "ar" && extra.nameAr ? extra.nameAr : extra.name,
+              price: Number(extra.price),
+            })),
+          },
+        ]
+      : []),
+    ...("optionGroups" in product
+      ? product.optionGroups
+          .map(({ group }) => ({
+            id: group.id,
+            name:
+              locale === "ar" && group.nameAr ? group.nameAr : group.name,
+            required: group.isRequired,
+            min: group.isRequired ? Math.max(1, group.minSelections) : 0,
+            max: group.isRequired
+              ? group.maxSelections
+              : group.options.filter(({ option }) => option.isAvailable).length,
+            options: group.options
+              .filter(({ option }) => option.isAvailable)
+              .map(({ option }) => ({
+                id: option.id,
+                name:
+                  locale === "ar" && option.nameAr
+                    ? option.nameAr
+                    : option.name,
+                price: Number(option.priceAdjustment),
+              })),
+          }))
+          .filter((group) => group.options.length > 0)
+      : []),
+  ];
 
   return (
     <main className="product-detail-page">
@@ -138,29 +195,14 @@ export default async function ProductPage({
             {product.stock !== null && (
               <small>{t("stock", { count: product.stock })}</small>
             )}
-            {product.extras.length > 0 && (
-              <div className="product-extras">
-                <h2>{t("extras")}</h2>
-                {product.extras.map((extra) => (
-                  <div key={extra.id}>
-                    <span>
-                      <Check />
-                      {locale === "ar" && extra.nameAr
-                        ? extra.nameAr
-                        : extra.name}
-                    </span>
-                    <b>+ {money.format(Number(extra.price))}</b>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Link
-              href={`/menu/${product.restaurant.slug}`}
-              className="button primary large"
-            >
-              <Plus />
-              {t("addFromMenu")}
-            </Link>
+            <ProductOrderOptions
+              slug={product.restaurant.slug}
+              productId={product.id}
+              price={Number(product.price)}
+              currency={product.restaurant.currency}
+              locale={locale}
+              groups={optionGroups}
+            />
           </div>
         </section>
       </div>

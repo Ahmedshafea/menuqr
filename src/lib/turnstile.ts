@@ -1,14 +1,17 @@
 export async function verifyTurnstile(request: Request, token: unknown) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
-    console.error(
+    console.warn(
       JSON.stringify({
-        level: "error",
+        level: "warn",
         context: "turnstile",
-        message: "TURNSTILE_SECRET_KEY is missing",
+        message:
+          process.env.NODE_ENV === "production"
+            ? "TURNSTILE_SECRET_KEY is missing"
+            : "Turnstile is disabled in local development",
       }),
     );
-    return false;
+    return process.env.NODE_ENV !== "production";
   }
   if (typeof token !== "string" || !token) return false;
 
