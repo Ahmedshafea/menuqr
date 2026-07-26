@@ -3,17 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { uploadRestaurantImage } from "@/lib/supabase/storage";
-import { 
-  UserPlus, 
-  Phone, 
-  MessageSquare, 
-  Bike, 
-  Upload, 
-  User, 
-  CheckCircle2, 
-  Clock, 
-  XCircle 
-} from "lucide-react";
+import { UserPlus, Phone, Bike, Upload, User } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 

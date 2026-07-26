@@ -107,16 +107,10 @@ export default async function TeamPage({
             <tbody>
               {members.map((member) => (
                 <tr key={member.id}>
-                  <td>
-                    <strong>{member.user.name}</strong>
-                  </td>
-                  <td>
-                  {member.user.email}
-                  </td>
-                  <td>{member.role}</td>
-                  <td>
-                    <span className="status completed">{common("active")}</span>
-                  </td>
+                  <td data-label={t("member")}><strong>{member.user.name}</strong></td>
+                  <td data-label={t("email")}>{member.user.email}</td>
+                  <td data-label={t("role")}>{member.role}</td>
+                  <td data-label={t("status")}><span className="status completed">{common("active")}</span></td>
                 </tr>
               ))}
             </tbody>

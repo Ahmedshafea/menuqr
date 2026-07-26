@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { auth, signOut } from "@/auth";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import "./account.css";
+import { CustomerShellWrapper } from "@/components/customer-shell-wrapper";
 
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const [session, t] = await Promise.all([auth(), getTranslations("customerAccount.nav")]);
@@ -18,5 +19,6 @@ export default async function AccountLayout({ children }: { children: React.Reac
     { href: "/account/addresses", label: t("addresses"), icon: MapPin },
     { href: "/account/profile", label: t("profile"), icon: UserRound },
   ];
-  return <main className="customer-shell"><aside className="customer-side"><Link href="/" className="brand"><span><QrCode /></span>MenuQR</Link><nav>{links.map(({href,label,icon:Icon})=><Link href={href} key={href}><Icon />{label}</Link>)}</nav><div><LanguageSwitcher compact/>{session.user.restaurantId&&<Link href="/dashboard"><Store />{t("restaurantDashboard")}</Link>}<form action={async()=>{"use server";await signOut({redirectTo:"/"});}}><button><LogOut />{t("signOut")}</button></form></div></aside>{children}</main>;
+  const sidebar = <aside className="customer-side"><Link href="/" className="brand"><span><QrCode /></span>MenuQR</Link><nav>{links.map(({href,label,icon:Icon})=><Link href={href} key={href}><Icon />{label}</Link>)}</nav><div><LanguageSwitcher compact/>{session.user.restaurantId&&<Link href="/dashboard"><Store />{t("restaurantDashboard")}</Link>}<form action={async()=>{"use server";await signOut({redirectTo:"/"});}}><button><LogOut />{t("signOut")}</button></form></div></aside>;
+  return <CustomerShellWrapper sidebar={sidebar}>{children}</CustomerShellWrapper>;
 }

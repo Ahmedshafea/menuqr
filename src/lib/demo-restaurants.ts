@@ -14,6 +14,8 @@ export type DemoRestaurant = {
   isActive: true;
   address: string;
   mapUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
   phone: string;
   facebookUrl: null;
   instagramUrl: null;
@@ -124,6 +126,8 @@ const demos: DemoRestaurant[] = [
     isActive: true,
     address: "شارع التسعين، التجمع الخامس، القاهرة",
     mapUrl: null,
+    latitude: null,
+    longitude: null,
     phone: "0100 000 0001",
     facebookUrl: null,
     instagramUrl: null,
@@ -156,6 +160,8 @@ const demos: DemoRestaurant[] = [
     isActive: true,
     address: "شارع جامعة الدول العربية، المهندسين",
     mapUrl: null,
+    latitude: null,
+    longitude: null,
     phone: "0100 000 0002",
     facebookUrl: null,
     instagramUrl: null,
@@ -188,6 +194,8 @@ const demos: DemoRestaurant[] = [
     isActive: true,
     address: "شارع البحر الأعظم، الجيزة",
     mapUrl: null,
+    latitude: null,
+    longitude: null,
     phone: "0100 000 0003",
     facebookUrl: null,
     instagramUrl: null,
@@ -220,6 +228,8 @@ const demos: DemoRestaurant[] = [
     isActive: true,
     address: "شارع الكوربة، مصر الجديدة",
     mapUrl: null,
+    latitude: null,
+    longitude: null,
     phone: "0100 000 0004",
     facebookUrl: null,
     instagramUrl: null,

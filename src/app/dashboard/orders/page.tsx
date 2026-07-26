@@ -110,51 +110,51 @@ export default async function OrdersPage({
           <button className="button ghost">{common("search")}</button>
         </form>
         {orders.length ? (
-          <table>
-            <thead>
+          <table className="w-full">
+            <thead className="hidden md:table-header-group">
               <tr>
                 <th>{t("order")}</th>
                 <th>{t("customer")}</th>
-                <th>{t("phone")}</th>
-                <th>{t("items")}</th>
+                <th className="hidden lg:table-cell">{t("phone")}</th>
+                <th className="hidden xl:table-cell">{t("items")}</th>
                 <th>{t("total")}</th>
                 <th>{t("status")}</th>
-                <th>{t("date")}</th>
+                <th className="hidden lg:table-cell">{t("date")}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="block md:table-row-group">
               {orders.map((order) => (
-                <tr key={order.id}>
-                  <td>
-                    <Link href={`/order/${order.accessToken}`}>
-                      {order.orderNumber}
+                <tr key={order.id} className="block md:table-row border md:border-0 rounded-xl mb-4 p-4 md:p-0 bg-white md:bg-transparent">
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("order")}>
+                    <Link href={`/order/${order.accessToken}`} className="text-orange-600 font-bold">
+                      #{order.orderNumber}
                     </Link>
                   </td>
-                  <td>
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("customer")}>
                     {order.customerName}
-                                      </td>
-                  <td>
+                  </td>
+                  <td className="block md:table-cell py-2 md:py-4 lg:table-cell" data-label={t("phone")}>
                     {order.customerPhone}
                   </td>
-                  <td>{order._count.items}</td>
-                  <td>{money(Number(order.total))}</td>
-                  <td>
-                    <form action={updateStatus}>
+                  <td className="block md:table-cell py-2 md:py-4 xl:table-cell" data-label={t("items")}>{order._count.items}</td>
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("total")}>{money(Number(order.total))}</td>
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("status")}>
+                    <form action={updateStatus} className="flex gap-2">
                       <input type="hidden" name="id" value={order.id} />
                       <input
                         type="hidden"
                         name="accessToken"
                         value={order.accessToken}
                       />
-                      <select name="status" defaultValue={order.status}>
+                      <select name="status" defaultValue={order.status} className="flex-1 min-w-0">
                         {statuses.map((value) => (
                           <option key={value} value={value}>{flow(`statuses.${value}`)}</option>
                         ))}
                       </select>
-                      <button>{common("save")}</button>
+                      <button className="px-2 bg-slate-800 text-white rounded">✓</button>
                     </form>
                   </td>
-                  <td>
+                  <td className="block md:table-cell py-2 md:py-4 lg:table-cell" data-label={t("date")}>
                     {new Intl.DateTimeFormat(locale, {
                       dateStyle: "medium",
                     }).format(order.createdAt)}
@@ -163,6 +163,7 @@ export default async function OrdersPage({
               ))}
             </tbody>
           </table>
+
         ) : (
           <div className="friendly-empty"><h2>{empty("ordersTitle")}</h2><p>{empty("ordersHelp")}</p></div>
         )}

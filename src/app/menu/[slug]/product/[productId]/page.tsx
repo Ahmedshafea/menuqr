@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { unstable_cache } from "next/cache";
 import { ArrowLeft } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -168,12 +169,16 @@ export default async function ProductPage({
             {product.images.length ? (
               product.images.map((image, index) => (
                 <div
-                  className={
-                    index === 0 ? "main-product-image" : "product-thumb"
-                  }
-                  style={{ backgroundImage: `url(${image.url})` }}
+                  className={index === 0 ? "main-product-image" : "product-thumb"}
                   key={image.id}
-                />
+                >
+                  <Image
+                    src={image.url}
+                    alt={name}
+                    fill
+                    sizes={index === 0 ? "(max-width: 800px) 100vw, 58vw" : "(max-width: 800px) 25vw, 14vw"}
+                  />
+                </div>
               ))
             ) : (
               <div className="main-product-image empty-image" />

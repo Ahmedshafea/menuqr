@@ -658,47 +658,47 @@ export default async function MenuManagementPage({
           </Link>
         </div>
         {products.length ? (
-          <table>
-            <thead>
+          <table className="w-full">
+            <thead className="hidden md:table-header-group">
               <tr>
                 <th>{t("product")}</th>
-                <th>{t("category")}</th>
+                <th className="hidden lg:table-cell">{t("category")}</th>
                 <th>{t("price")}</th>
-                <th>{t("stock")}</th>
+                <th className="hidden xl:table-cell">{t("stock")}</th>
                 <th>{t("availability")}</th>
                 <th>{t("actions")}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="block md:table-row-group">
               {products.map((product) => (
-                <tr key={product.id}>
-                  <td>
+                <tr key={product.id} className="block md:table-row border md:border-0 rounded-xl mb-4 p-4 md:p-0 bg-white md:bg-transparent">
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("product")}>
                     <strong>
                       {locale === "ar" && product.nameAr
                         ? product.nameAr
                         : product.name}
                     </strong>
                   </td>
-                  <td>
+                  <td className="block md:table-cell py-2 md:py-4 lg:table-cell" data-label={t("category")}>
                     {locale === "ar" && product.category.nameAr
                       ? product.category.nameAr
                       : product.category.name}
                   </td>
-                  <td>{money(Number(product.price))}</td>
-                  <td>{product.stock ?? "—"}</td>
-                  <td>
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("price")}>{money(Number(product.price))}</td>
+                  <td className="block md:table-cell py-2 md:py-4 xl:table-cell" data-label={t("stock")}>{product.stock ?? "—"}</td>
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("availability")}>
                     <form action={setAvailability} className="quick-availability">
                       <input type="hidden" name="id" value={product.id} />
-                      <select name="availability" defaultValue={product.availability}>
+                      <select name="availability" defaultValue={product.availability} className="w-full md:w-auto">
                         <option value="AVAILABLE">{productText("available")}</option>
                         <option value="TEMPORARILY_UNAVAILABLE">{productText("temporary")}</option>
                         <option value="HIDDEN">{productText("hidden")}</option>
                       </select>
-                      <button aria-label={productText("save")}>✓</button>
+                      <button aria-label={productText("save")} className="hidden md:flex">✓</button>
                     </form>
                   </td>
-                  <td>
-                    <div className="row-actions">
+                  <td className="block md:table-cell py-2 md:py-4" data-label={t("actions")}>
+                    <div className="row-actions flex items-center gap-2 justify-end md:justify-start">
                       <details className="product-create edit-product">
                         <summary className="icon-edit" aria-label={t("edit")}>
                           <Pencil />

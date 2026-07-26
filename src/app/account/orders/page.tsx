@@ -70,7 +70,7 @@ export default async function CustomerOrders({
                   .join(",");
                 return (
                   <tr key={order.id}>
-                    <td>
+                    <td data-label={t("orders.restaurant")}>
                       <b>
                         {locale === "ar" && order.restaurant.nameAr
                           ? order.restaurant.nameAr
@@ -78,24 +78,20 @@ export default async function CustomerOrders({
                       </b>
                       <small>{order.orderNumber}</small>
                     </td>
-                    <td>
-                      {new Intl.DateTimeFormat(locale, {
+                    <td data-label={t("orders.date")}>{new Intl.DateTimeFormat(locale, {
                         dateStyle: "medium",
                       }).format(order.createdAt)}
                     </td>
-                    <td>
-                      <span className="customer-status">
+                    <td data-label={t("orders.status")}><span className="customer-status">
                         {flow(`statuses.${order.status}`)}
                       </span>
                     </td>
-                    <td>
-                      {new Intl.NumberFormat(locale, {
+                    <td data-label={t("orders.total")}>{new Intl.NumberFormat(locale, {
                         style: "currency",
                         currency: order.restaurant.currency,
                       }).format(Number(order.total))}
                     </td>
-                    <td>
-                      <div className="table-actions">
+                    <td data-label={t("orders.details")}><div className="table-actions">
                         <Link href={`/order/${order.accessToken}`}>
                           {t("orders.details")}
                         </Link>
