@@ -34,5 +34,31 @@ export default async function Dashboard() {
     await prisma.setting.updateMany({ where: { restaurantId }, data: { setupChecklistDismissed: true } });
     revalidatePath("/dashboard");
   }
-  return <section className="dash-main"><header><div><small>{data.restaurant.name}</small><h1>{t("greeting", { name: session.user.name?.split(" ")[0] || data.restaurant.name })}</h1><p>{t("summary")}</p></div><Link className="button primary" href={`/menu/${data.restaurant.slug}`}><Eye />{common("viewMenu")}</Link></header>{!data.restaurant.settings?.setupChecklistDismissed&&<article className="setup-checklist"><header><div><h2>{setup("title")}</h2><p>{setup("progress",{done:completed,total:checklist.length})}</p></div>{completed===checklist.length&&<form action={dismissChecklist}><button>{setup("dismiss")}</button></form>}</header><div className="setup-progress"><i style={{width:`${completed/checklist.length*100}%`}}/></div><div>{checklist.map(item=><Link href={item.href} key={item.key}>{item.done?<CheckCircle2/>:<Circle/>}{setup(item.key as never)}</Link>)}</div></article>}<div className="stats">{stats.map(stat => <article key={stat.label}><stat.icon /><p>{stat.label}</p><strong>{stat.value}</strong></article>)}</div><div className="dash-grid"><article className="dash-card recent"><h2>{t("recentOrders")}</h2>{data.recentOrders.length ? <table><tbody>{data.recentOrders.map(order => <tr key={order.id}><td>{order.orderNumber}</td><td>{order.customerName}</td><td>{order._count.items}</td><td>{money(Number(order.total))}</td></tr>)}</tbody></table> : <div className="friendly-empty compact"><ShoppingBag/><h3>{empty("ordersTitle")}</h3><p>{empty("ordersHelp")}</p></div>}</article><article className="dash-card"><h2>{t("topProducts")}</h2><div className="rank-list">{data.topProducts.length ? data.topProducts.map((product, index) => <div key={product.productName}><b>{index + 1}</b><span>{product.productName}</span><strong>{product._sum?.quantity ?? 0}</strong></div>) : <p>{common("noData")}</p>}</div></article><article className="dash-card"><h2>{t("recentCustomers")}</h2><div className="rank-list">{data.recentCustomers.length ? data.recentCustomers.map(customer => <div key={customer.customerPhone}><span>{customer.customerName}<small>{customer.customerPhone}</small></span></div>) : <p>{common("noData")}</p>}</div></article></div></section>;
+  return <section className="dash-main"><header><div><small>{data.restaurant.name}</small><h1>{t("greeting", { name: session.user.name?.split(" ")[0] || data.restaurant.name })}</h1><p>{t("summary")}</p></div><Link className="button primary" href={`/menu/${data.restaurant.slug}`}><Eye />{common("viewMenu")}</Link></header>{!data.restaurant.settings?.setupChecklistDismissed&&<article className="setup-checklist"><header><div><h2>{setup("title")}</h2><p>{setup("progress",{done:completed,total:checklist.length})}</p></div>{completed===checklist.length&&<form action={dismissChecklist}><button>{setup("dismiss")}</button></form>}</header><div className="setup-progress"><i style={{width:`${completed/checklist.length*100}%`}}/></div><div>{checklist.map(item=><Link href={item.href} key={item.key}>{item.done?<CheckCircle2/>:<Circle/>}{setup(item.key as never)}</Link>)}</div></article>}<div className="stats">{stats.map(stat => <article key={stat.label}><stat.icon /><p>{stat.label}</p><strong>{stat.value}</strong></article>)}</div><div className="dash-grid"><article className="dash-card recent"><h2>{t("recentOrders")}</h2>{data.recentOrders.length ? <table><tbody>{data.recentOrders.map(order => <tr key={order.id}><td>{order.orderNumber}</td><td>{order.customerName}</td><td>{order._count.items}</td><td>{money(Number(order.total))}</td></tr>)}</tbody></table> : <div className="friendly-empty compact"><ShoppingBag/><h3>{empty("ordersTitle")}</h3><p>{empty("ordersHelp")}</p></div>}</article>
+  
+<article className="dash-card">
+  <h2>{t("topProducts")}</h2>
+  <div className="rank-list">
+    {data.topProducts.length ? (
+      data.topProducts.map((product, index) => {
+        // إذا كانت اللغة عربية وله اسم عربي استخدمه، وإلا استخدم الاسم الأساسي
+        const displayName = locale === "ar"
+          ? (product.productNameAr || product.productName)
+          : product.productName;
+
+        return (
+          <div key={product.productName + index}>
+            <b>{index + 1}</b>
+            <span>{displayName}</span>
+            <strong>{product._sum?.quantity ?? 0}</strong>
+          </div>
+        );
+      })
+    ) : (
+      <p>{common("noData")}</p>
+    )}
+  </div>
+</article>
+  
+  <article className="dash-card"><h2>{t("recentCustomers")}</h2><div className="rank-list">{data.recentCustomers.length ? data.recentCustomers.map(customer => <div key={customer.customerPhone}><span>{customer.customerName}<small>{customer.customerPhone}</small></span></div>) : <p>{common("noData")}</p>}</div></article></div></section>;
 }
