@@ -7,10 +7,11 @@ import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { RestaurantQr } from "@/components/restaurant-qr";
 import { redirect } from "next/navigation";
 import { NotificationPreferences } from "@/components/notification-preferences";
+import LocationField from "@/components/map/LocationField";
 export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const { restaurantId } = await requireTenant();
-  const [t, common, qr, polish, mvp, notifications, fulfillment, pricing, restaurant] = await Promise.all([
+  const [t, common, qr, polish, mvp, notifications, fulfillment, pricing, maps, restaurant] = await Promise.all([
     getTranslations("settings"),
     getTranslations("common"),
     getTranslations("qr"),
@@ -19,6 +20,7 @@ export default async function SettingsPage() {
     getTranslations("mvpPolish.notifications"),
     getTranslations("restaurantWorkflow.settings"),
     getTranslations("pricingSettings"),
+    getTranslations("maps"),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
       include: {
@@ -52,6 +54,12 @@ export default async function SettingsPage() {
     ]);
     const name = String(form.get("name") || "").trim();
     const address = String(form.get("address") || "").trim();
+    const coordinate = (name: string, min: number, max: number) => {
+      const raw = String(form.get(name) || "").trim();
+      if (!raw) return null;
+      const value = Number(raw);
+      return Number.isFinite(value) && value >= min && value <= max ? value : null;
+    };
     const adjustmentType = (name: string) =>
       form.get(name) === "PERCENTAGE" ? "PERCENTAGE" : "FIXED";
     const adjustmentValue = (name: string, typeName: string) => {
@@ -71,7 +79,9 @@ export default async function SettingsPage() {
           phone: String(form.get("phone") || "").trim() || null,
           whatsapp: String(form.get("whatsapp") || "").replace(/\D/g, ""),
           address: address || null,
-          mapUrl: String(form.get("mapUrl") || "").trim() || null,
+          mapUrl: null,
+          latitude: coordinate("latitude", -90, 90),
+          longitude: coordinate("longitude", -180, 180),
           facebookUrl: String(form.get("facebookUrl") || "").trim() || null,
           instagramUrl: String(form.get("instagramUrl") || "").trim() || null,
           currency: String(form.get("currency") || "EGP"),
@@ -250,14 +260,16 @@ export default async function SettingsPage() {
                 defaultValue={restaurant.address ?? branch?.address ?? ""}
               />
             </label>
-            <label className="full">
-              {t("map")}
-              <input
-                name="mapUrl"
-                type="url"
-                defaultValue={restaurant.mapUrl ?? ""}
+            <div className="full restaurant-location-field">
+              <h3>{maps("title")}</h3>
+              <LocationField
+                initialLat={restaurant.latitude == null ? null : Number(restaurant.latitude)}
+                initialLng={restaurant.longitude == null ? null : Number(restaurant.longitude)}
+                latitudeName="latitude"
+                longitudeName="longitude"
+                autoLocate
               />
-            </label>
+            </div>
             <label>
               {t("facebook")}
               <input

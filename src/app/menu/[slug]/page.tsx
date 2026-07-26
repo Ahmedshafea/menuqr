@@ -126,7 +126,7 @@ export default async function MenuPage({
       ]),
   );
   const session = await auth();
-  const customerDefaults = !isDemo && session?.user.roles.includes("CUSTOMER") ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, phone: true, customerProfile: { select: { addresses: { where: { isDefault: true }, take: 1, select: { address: true } } } } } }) : null;
+  const customerDefaults = !isDemo && session?.user.roles.includes("CUSTOMER") ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, phone: true, customerProfile: { select: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }], select: { id: true, title: true, address: true, latitude: true, longitude: true, isDefault: true } } } } } }) : null;
   const address = restaurant.address || branch?.address;
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}`;
   return (
@@ -186,8 +186,8 @@ export default async function MenuPage({
                 {experienceText("estimated", { minutes: restaurant.settings?.estimatedOrderMinutes ?? 30 })}
               </b>
               {address &&
-                (restaurant.mapUrl ? (
-                  <a href={restaurant.mapUrl} target="_blank" rel="noreferrer">
+                (restaurant.latitude != null && restaurant.longitude != null ? (
+                  <a href={`https://www.google.com/maps?q=${Number(restaurant.latitude)},${Number(restaurant.longitude)}`} target="_blank" rel="noreferrer">
                     <MapPin />
                     {address}
                   </a>
@@ -259,7 +259,7 @@ export default async function MenuPage({
           initialCart={initialCart}
           initialSelectedExtras={initialSelectedExtras}
           initialOpen={menuParams.checkout === "1" && Object.keys(initialCart).length > 0}
-          customerDefaults={customerDefaults ? { name: customerDefaults.name, phone: customerDefaults.phone ?? "", address: customerDefaults.customerProfile?.addresses[0]?.address ?? "" } : undefined}
+          customerDefaults={customerDefaults ? { name: customerDefaults.name, phone: customerDefaults.phone ?? "", address: customerDefaults.customerProfile?.addresses[0]?.address ?? "", addresses: (customerDefaults.customerProfile?.addresses ?? []).map((item) => ({ id: item.id, title: item.title, address: item.address, latitude: item.latitude == null ? null : Number(item.latitude), longitude: item.longitude == null ? null : Number(item.longitude), isDefault: item.isDefault })) } : undefined}
           demo={isDemo}
         />
         {"reviews" in restaurant&&restaurant.reviews.length>0&&<section className="public-reviews"><header><h2>{reviewsText("latest")}</h2><strong>★ {(restaurant.reviews.reduce((sum,review)=>sum+review.overall,0)/restaurant.reviews.length).toFixed(1)} · {reviewsText("count",{count:restaurant.reviews.length})}</strong></header><div>{restaurant.reviews.map(review=><article key={review.id}><b>{"★".repeat(review.overall)}</b><p>{review.comment}</p><small>{review.order.customerName}</small></article>)}</div></section>}

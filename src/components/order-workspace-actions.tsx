@@ -1,14 +1,12 @@
 "use client";
 
-import { Clipboard, MapPin, MessageCircle, Phone, Printer } from "lucide-react";
+import { MessageCircle, Phone, Printer } from "lucide-react";
 
 export function CustomerQuickActions({
   phone,
-  address,
   labels,
 }: {
   phone: string;
-  address?: string | null;
   labels: {
     call: string;
     whatsapp: string;
@@ -16,9 +14,6 @@ export function CustomerQuickActions({
     maps: string;
   };
 }) {
-  const mapsUrl = address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
-    : null;
   return (
     <div className="customer-quick-actions">
       <a href={`tel:${phone}`} className="button ghost">
@@ -34,27 +29,6 @@ export function CustomerQuickActions({
         <MessageCircle />
         {labels.whatsapp}
       </a>
-      {address && (
-        <button
-          type="button"
-          className="button ghost"
-          onClick={() => navigator.clipboard.writeText(address)}
-        >
-          <Clipboard />
-          {labels.copyAddress}
-        </button>
-      )}
-      {mapsUrl && (
-        <a
-          href={mapsUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="button ghost"
-        >
-          <MapPin />
-          {labels.maps}
-        </a>
-      )}
     </div>
   );
 }

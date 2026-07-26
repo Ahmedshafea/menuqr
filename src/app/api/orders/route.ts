@@ -191,6 +191,8 @@ export async function POST(request: Request) {
         customerName: data.customerName,
         customerPhone: data.customerPhone,
         deliveryAddress: data.deliveryAddress,
+        deliveryLatitude: data.deliveryLatitude,
+        deliveryLongitude: data.deliveryLongitude,
         notes: data.notes,
         subtotal: pricing.subtotal,
         discountAmount: pricing.discountAmount,

@@ -16,6 +16,7 @@ import {
   CustomerQuickActions,
   OrderPrintActions,
 } from "@/components/order-workspace-actions";
+import { OrderLocationActions } from "@/components/order-location-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +34,13 @@ export default async function OrderTrackingPage({
 }) {
   const { token } = await params;
   const { result } = await searchParams;
-  const [session, t, flow, deliveryText, reviewText, locale, order] = await Promise.all([
+  const [session, t, flow, deliveryText, reviewText, mapsText, locale, order] = await Promise.all([
     auth(),
     getTranslations("orderTracking"),
     getTranslations("launchPolish.orders"),
     getTranslations("restaurantWorkflow.delivery"),
     getTranslations("restaurantWorkflow.reviews"),
+    getTranslations("maps"),
     getLocale(),
     prisma.order.findUnique({
       where: { accessToken: token },
@@ -621,7 +623,7 @@ export default async function OrderTrackingPage({
         )}
         <section className="order-layout">
           <div className="order-column">
-            <article className="order-card">
+            <article className="order-card order-items-card">
               <h2>{t("items")}</h2>
               {order.items.map((item) => (
                 <div className="tracking-item" key={item.id}>
@@ -651,9 +653,9 @@ export default async function OrderTrackingPage({
                     {item.isComplimentary ? flow("complimentary") : money(Number(item.unitPrice) * item.quantity)}
                   </strong>
                   {isRestaurant && <div className="order-item-management">
-                    <form action={changeQuantity}><input type="hidden" name="itemId" value={item.id}/><button name="delta" value="-1" title={flow("decrease")}><Minus /></button><button name="delta" value="1" title={flow("increase")}><Plus /></button></form>
+                    <div className="order-item-quick-actions"><form action={changeQuantity}><input type="hidden" name="itemId" value={item.id}/><button name="delta" value="-1" title={flow("decrease")}><Minus /></button><button name="delta" value="1" title={flow("increase")}><Plus /></button></form>
                     <form action={removeItem}><input type="hidden" name="itemId" value={item.id}/><button className="danger-action" title={flow("remove")}><Trash2 /></button></form>
-                    <form action={duplicateItem}><input type="hidden" name="itemId" value={item.id}/><button title={t("duplicate")}><Copy /></button></form>
+                    <form action={duplicateItem}><input type="hidden" name="itemId" value={item.id}/><button title={t("duplicate")}><Copy /></button></form></div>
                     <form action={replaceItem} className="replace-item-form"><input type="hidden" name="itemId" value={item.id}/><select name="productId" aria-label={flow("replaceWith")}>{order.restaurant.products.map(product=><option value={product.id} key={product.id}>{locale==="ar"&&product.nameAr?product.nameAr:product.name}</option>)}</select><button title={flow("replace")}><RefreshCw /></button></form>
                     <form action={updateItemNotes} className="item-notes-form"><input type="hidden" name="itemId" value={item.id}/><input name="notes" defaultValue={item.notes??""} placeholder={flow("itemNotes")} maxLength={500}/><button>{flow("addNotes")}</button></form>
                     {item.productId&&order.restaurant.products.some(product=>product.id===item.productId&&product.optionGroups.some(({group})=>group.options.some(({option})=>option.isAvailable)))&&<details className="edit-item-options"><summary>{t("editOptions")}</summary><form action={editItemOptions}><input type="hidden" name="itemId" value={item.id}/>{order.restaurant.products.find(product=>product.id===item.productId)?.optionGroups.flatMap(({group})=>group.options).filter(({option})=>option.isAvailable).map(({option})=><label key={option.id}><input type="checkbox" name="optionId" value={option.id} defaultChecked={item.options.some(selected=>selected.optionId===option.id)}/><span>{locale==="ar"&&option.nameAr?option.nameAr:option.name}</span><small>{Number(option.priceAdjustment)>=0?"+":""}{money(Number(option.priceAdjustment))}</small></label>)}<button className="button primary">{t("saveOptions")}</button></form></details>}
@@ -661,6 +663,8 @@ export default async function OrderTrackingPage({
                 </div>
               ))}
               {isRestaurant && <form action={addComplimentary} className="complimentary-form"><select name="productId">{order.restaurant.products.map(product=><option value={product.id} key={product.id}>{locale==="ar"&&product.nameAr?product.nameAr:product.name}</option>)}</select><button className="button ghost"><Gift />{flow("complimentary")}</button></form>}
+            </article>
+            <article className="order-card order-pricing-card">
               <div className="order-pricing-summary">
                 <p><span>{t("subtotal")}</span><b>{money(Number(order.subtotal))}</b></p>
                 <p><span>{t("discount")}</span><b>- {money(Number(order.discountAmount))}</b></p>
@@ -672,10 +676,10 @@ export default async function OrderTrackingPage({
               {isRestaurant && <form action={sendApprovalRequest}><button className="button whatsapp-button approval-button"><MessageCircle />{flow("sendApproval")}</button></form>}
               {isRestaurant&&order.fulfillmentType==="DELIVERY"&&<form action={assignDriver} className="driver-assignment"><select name="driverId" defaultValue={order.driverId??""}><option value="">{deliveryText("assign")}</option>{order.restaurant.drivers.filter(driver=>driver.status!=="OFFLINE"||driver.id===order.driverId).map(driver=><option key={driver.id} value={driver.id}>{driver.name} · {deliveryText(driver.status.toLowerCase() as "available"|"busy"|"offline")}</option>)}</select><button className="button primary">{deliveryText("assign")}</button></form>}
             </article>
-            {order.driver&&<article className="order-card driver-public-card">{order.driver.photoUrl&&<span style={{backgroundImage:`url(${order.driver.photoUrl})`}}/>}<div><h2>{order.driver.name}</h2><p>{order.driver.vehicleType}</p><a href={`tel:${order.driver.phone}`}>{order.driver.phone}</a>{order.driver.whatsapp&&<a className="button whatsapp-button" href={`https://wa.me/${order.driver.whatsapp}`}>{deliveryText("whatsapp")}</a>}{order.estimatedArrivalAt&&<small>{deliveryText("eta")}: {new Intl.DateTimeFormat(locale,{timeStyle:"short"}).format(order.estimatedArrivalAt)}</small>}</div></article>}
+            {order.driver&&<article className="order-card driver-public-card">{order.driver.photoUrl&&<span style={{backgroundImage:`url(${order.driver.photoUrl})`}}/>}<div><h2>{order.driver.name}</h2><p>{order.driver.vehicleType}</p><a href={`tel:${order.driver.phone}`}>{order.driver.phone}</a>{order.driver.whatsapp&&<a className="button whatsapp-button" href={`https://wa.me/${order.driver.whatsapp}`}>{deliveryText("whatsapp")}</a>}{order.status==="OUT_FOR_DELIVERY"&&order.deliveryLatitude!=null&&order.deliveryLongitude!=null&&<a className="button ghost" target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${Number(order.deliveryLatitude)},${Number(order.deliveryLongitude)}`}>{mapsText("openGoogle")}</a>}{order.estimatedArrivalAt&&<small>{deliveryText("eta")}: {new Intl.DateTimeFormat(locale,{timeStyle:"short"}).format(order.estimatedArrivalAt)}</small>}</div></article>}
             {order.status==="COMPLETED"&&!order.review&&<article className="order-card"><h2>{reviewText("title")}</h2><form action={submitReview} className="review-form">{[["foodQuality","food"],["deliverySpeed","speed"],["packaging","packaging"],["overall","overall"]].map(([name,key])=><label key={name}>{reviewText(key as "food"|"speed"|"packaging"|"overall")}<select name={name} required defaultValue="5">{[5,4,3,2,1].map(value=><option key={value} value={value}>{"★".repeat(value)}</option>)}</select></label>)}<textarea name="comment" maxLength={1000} placeholder={reviewText("comment")}/><button className="button primary">{reviewText("submit")}</button></form></article>}
             {isRestaurant&&order.review&&<article className="order-card order-review-card"><header><h2>{t("rating")}</h2><span>{t(order.review.status==="PUBLISHED"?"published":order.review.status==="HIDDEN"?"hidden":"pendingReview")}</span></header><div><p><b>{order.review.foodQuality}/5</b>{t("foodRating")}</p><p><b>{order.review.deliverySpeed}/5</b>{t("deliveryRating")}</p><p><b>{order.review.packaging}/5</b>{t("packagingRating")}</p><p><b>{order.review.overall}/5</b>{t("overallRating")}</p></div>{order.review.comment&&<blockquote>{order.review.comment}</blockquote>}<form action={moderateReview}><button name="status" value="PUBLISHED" className="button primary">{t("publish")}</button><button name="status" value="HIDDEN" className="button ghost">{t("hide")}</button></form></article>}
-            <article className="order-card">
+            <article className="order-card order-conversation-card">
               <h2>{t("conversation")}</h2>
               <div className="order-messages">
                 {order.messages.length ? (
@@ -739,8 +743,7 @@ export default async function OrderTrackingPage({
                 <p>
                   <b>{t("address")}:</b> {order.deliveryAddress}
                 </p>
-              )}
-              {order.notes && (
+              )}              {order.notes && (
                 <p>
                   <b>{t("notes")}:</b> {order.notes}
                 </p>
@@ -752,28 +755,42 @@ export default async function OrderTrackingPage({
                 </div>
               )}
               {isRestaurant && (
-                <CustomerQuickActions
+                <div className="customer-actions-grid">
+                  <CustomerQuickActions
                   phone={order.customerPhone}
-                  address={order.deliveryAddress}
                   labels={{
                     call: t("call"),
                     whatsapp: t("whatsapp"),
                     copyAddress: t("copyAddress"),
                     maps: t("openMaps"),
                   }}
-                />
+                  />
+                  {order.deliveryLatitude != null && order.deliveryLongitude != null && (
+                    <OrderLocationActions
+                      latitude={Number(order.deliveryLatitude)}
+                      longitude={Number(order.deliveryLongitude)}
+                      labels={{
+                        view: mapsText("viewLocation"),
+                        title: mapsText("deliveryTitle"),
+                        openGoogle: mapsText("openGoogle"),
+                        copy: mapsText("copyCoordinates"),
+                        copied: mapsText("coordinatesCopied"),
+                      }}
+                    />
+                  )}
+                </div>
               )}
             </details>
-            <article className="order-card">
+            <article className="order-card order-timeline-card">
               <h2><History />{flow("timeline")}</h2>
               <div className="order-timeline">
-                {timelineStatuses.map((status) => {
+                {timelineStatuses.filter((status) => status === order.status || order.statusHistory.some((item) => item.status === status)).map((status) => {
                   const entry = [...order.statusHistory].reverse().find((item) => item.status === status);
                   return <div className={`timeline-entry ${entry ? `status-${status.toLowerCase()} completed-step` : "pending-step"}`} key={status}><i /><time>{entry ? new Intl.DateTimeFormat(locale,{hour:"2-digit",minute:"2-digit"}).format(entry.createdAt) : "—"}</time><strong>{t(`statuses.${status}`)}</strong></div>;
                 })}
               </div>
             </article>
-            {isRestaurant && <article className="order-card"><h2>{flow("actionLog")}</h2><div className="order-action-log">{order.actionLogs.map(log=><div key={log.id}><span><b>{log.user?.name??restaurantName}</b>{flow.has(`actions.${log.action}`)?flow(`actions.${log.action}`):log.action}</span><time>{new Intl.DateTimeFormat(locale,{dateStyle:"short",timeStyle:"short"}).format(log.createdAt)}</time></div>)}</div></article>}
+            {isRestaurant && order.actionLogs.length > 0 && <article className="order-card"><h2>{flow("actionLog")}</h2><div className="order-action-log">{order.actionLogs.map(log=><div key={log.id}><span><b>{log.user?.name??restaurantName}</b>{flow.has(`actions.${log.action}`)?flow(`actions.${log.action}`):log.action}</span><time>{new Intl.DateTimeFormat(locale,{dateStyle:"short",timeStyle:"short"}).format(log.createdAt)}</time></div>)}</div></article>}
             {!order.customerUserId && !isRestaurant && (
               <article className="order-card">
                 <h2>{t("createAccount")}</h2>

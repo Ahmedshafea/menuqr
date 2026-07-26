@@ -5,6 +5,7 @@ import { Heart, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import LocationField from "@/components/map/LocationField";
 const TurnstileWidget = dynamic(
   () =>
     import("@/components/turnstile-widget").then(
@@ -40,7 +41,7 @@ export function MenuClient({
   initialCart?: Record<string, number>;
   initialSelectedExtras?: Record<string, string[]>;
   initialOpen?: boolean;
-  customerDefaults?: { name: string; phone: string; address: string };
+  customerDefaults?: { name: string; phone: string; address: string; addresses: { id: string; title: string; address: string; latitude: number | null; longitude: number | null; isDefault: boolean }[] };
   demo?: boolean;
 }) {
   const t = useTranslations("publicMenu");
@@ -50,6 +51,7 @@ export function MenuClient({
   const demoText = useTranslations("demo");
   const validationText = useTranslations("restaurantWorkflow.validation");
   const optionText = useTranslations("productFormOptions");
+  const mapsText = useTranslations("maps");
   const locale = useLocale();
   const defaultFulfillment = restaurant.fulfillment.delivery
     ? "DELIVERY"
@@ -69,6 +71,9 @@ export function MenuClient({
     useState<Record<string, string[]>>(initialSelectedExtras);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [demoPreview, setDemoPreview] = useState("");
+  const defaultAddress = customerDefaults?.addresses.find((item) => item.isDefault) ?? customerDefaults?.addresses[0];
+  const [deliveryAddress, setDeliveryAddress] = useState(defaultAddress?.address ?? customerDefaults?.address ?? "");
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number | null; lng: number | null }>({ lat: defaultAddress?.latitude ?? null, lng: defaultAddress?.longitude ?? null });
   const categories = [...new Set(products.map((product) => product.category))];
   const visible = products.filter(
     (product) =>
@@ -174,6 +179,8 @@ export function MenuClient({
         customerName: form.get("name"),
         customerPhone: form.get("phone"),
         deliveryAddress: form.get("address") || undefined,
+        deliveryLatitude: form.get("deliveryLatitude") || undefined,
+        deliveryLongitude: form.get("deliveryLongitude") || undefined,
         fulfillmentType:form.get("fulfillmentType"),
         notes: form.get("notes") || undefined,
         createAccount,
@@ -455,7 +462,9 @@ export function MenuClient({
               <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" checked={fulfillmentType==="DELIVERY"} onChange={()=>setFulfillmentType("DELIVERY")}/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" checked={fulfillmentType==="PICKUP"} onChange={()=>setFulfillmentType("PICKUP")}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" checked={fulfillmentType==="DINE_IN"} onChange={()=>setFulfillmentType("DINE_IN")}/>{demoText("dineIn")}</label>}</div>
               <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
               <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
-              <input name="address" required={fulfillmentType==="DELIVERY"} placeholder={fulfillmentType==="DELIVERY"?t("addressRequired"):t("address")} defaultValue={customerDefaults?.address} />
+                            {fulfillmentType === "DELIVERY" && customerDefaults?.addresses.length ? <select className="saved-address-select" defaultValue={defaultAddress?.id ?? ""} onChange={(event) => { const saved = customerDefaults.addresses.find((item) => item.id === event.target.value); if (saved) { setDeliveryAddress(saved.address); setDeliveryCoordinates({ lat: saved.latitude, lng: saved.longitude }); } else { setDeliveryAddress(""); setDeliveryCoordinates({ lat: null, lng: null }); } }}><option value="">{mapsText("manualAddress")}</option>{customerDefaults.addresses.map((item) => <option value={item.id} key={item.id}>{item.title} — {item.address}</option>)}</select> : null}
+              <input name="address" required={fulfillmentType==="DELIVERY"} placeholder={fulfillmentType==="DELIVERY"?t("addressRequired"):t("address")} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} />
+              {fulfillmentType === "DELIVERY" && <section className="checkout-location"><h3>{mapsText("deliveryTitle")}</h3><LocationField initialLat={deliveryCoordinates.lat} initialLng={deliveryCoordinates.lng} latitudeName="deliveryLatitude" longitudeName="deliveryLongitude" autoLocate={!defaultAddress} onChange={(lat, lng) => setDeliveryCoordinates({ lat, lng })} /></section>}
               <textarea name="notes" placeholder={t("notes")} />
               {!demo && !customerDefaults && <section className="checkout-account-choice">
                 <h3>{accountT("saveInfoTitle")}</h3>

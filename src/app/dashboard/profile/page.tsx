@@ -1,3 +1,64 @@
-import Link from "next/link"; import { Clock3,ExternalLink,Mail,MapPin,Phone,Settings,Smartphone } from "lucide-react"; import { getLocale,getTranslations } from "next-intl/server"; import { prisma } from "@/lib/prisma"; import { requireTenant } from "@/lib/tenant";
-export const dynamic="force-dynamic";
-export default async function RestaurantProfilePage(){const {restaurantId}=await requireTenant();const [restaurant,t,d,locale]=await Promise.all([prisma.restaurant.findUniqueOrThrow({where:{id:restaurantId},include:{branches:{where:{isActive:true},include:{workingHours:{orderBy:{dayOfWeek:"asc"}}}}}}),getTranslations("settings"),getTranslations("dashboard"),getLocale()]);const name=locale==="ar"&&restaurant.nameAr?restaurant.nameAr:restaurant.name;const description=locale==="ar"&&restaurant.descriptionAr?restaurant.descriptionAr:restaurant.description;return <section className="dash-main"><header><div><small>{d("profile")}</small><h1>{name}</h1><p>{description||t("noDescription")}</p></div><Link href="/dashboard/settings" className="button primary"><Settings/>{d("settings")}</Link></header><article className="dash-card restaurant-profile-card"><div className="profile-cover" style={restaurant.coverUrl?{backgroundImage:`url(${restaurant.coverUrl})`}:undefined}/><div className="profile-logo" style={restaurant.logoUrl?{backgroundImage:`url(${restaurant.logoUrl})`}:undefined}/><div className="profile-content"><h2>{name}</h2><p>{description||t("noDescription")}</p><div className="profile-facts">{restaurant.email&&<span><Mail/>{restaurant.email}</span>}{restaurant.phone&&<span><Phone/>{restaurant.phone}</span>}<span><Smartphone/>{restaurant.whatsapp}</span>{restaurant.address&&<span><MapPin/>{restaurant.address}</span>}{restaurant.mapUrl&&<a href={restaurant.mapUrl} target="_blank" rel="noreferrer"><ExternalLink/>{t("openMap")}</a>}</div></div></article><div className="profile-branches">{restaurant.branches.map(branch=><article className="dash-card" key={branch.id}><h2>{branch.name}</h2><p><MapPin/>{branch.address}</p><div className="hours-list">{branch.workingHours.map(hour=><span key={hour.id}><Clock3/>{t(`days.${hour.dayOfWeek}`)}: {hour.isClosed?t("closed"):`${hour.opensAt} – ${hour.closesAt}`}</span>)}</div></article>)}</div></section>}
+import Link from "next/link";
+import { Clock3, ExternalLink, Mail, MapPin, Phone, Settings, Smartphone } from "lucide-react";
+import { getLocale, getTranslations } from "next-intl/server";
+import { prisma } from "@/lib/prisma";
+import { requireTenant } from "@/lib/tenant";
+
+export const dynamic = "force-dynamic";
+
+export default async function RestaurantProfilePage() {
+  const { restaurantId } = await requireTenant();
+  const [restaurant, t, d, locale] = await Promise.all([
+    prisma.restaurant.findUniqueOrThrow({
+      where: { id: restaurantId },
+      include: {
+        branches: {
+          where: { isActive: true },
+          include: { workingHours: { orderBy: { dayOfWeek: "asc" } } },
+        },
+      },
+    }),
+    getTranslations("settings"),
+    getTranslations("dashboard"),
+    getLocale(),
+  ]);
+  const name = locale === "ar" && restaurant.nameAr ? restaurant.nameAr : restaurant.name;
+  const description = locale === "ar" && restaurant.descriptionAr ? restaurant.descriptionAr : restaurant.description;
+  const locationUrl =
+    restaurant.latitude != null && restaurant.longitude != null
+      ? `https://www.google.com/maps?q=${Number(restaurant.latitude)},${Number(restaurant.longitude)}`
+      : null;
+
+  return (
+    <section className="dash-main">
+      <header>
+        <div><small>{d("profile")}</small><h1>{name}</h1><p>{description || t("noDescription")}</p></div>
+        <Link href="/dashboard/settings" className="button primary"><Settings />{d("settings")}</Link>
+      </header>
+      <article className="dash-card restaurant-profile-card">
+        <div className="profile-cover" style={restaurant.coverUrl ? { backgroundImage: `url(${restaurant.coverUrl})` } : undefined} />
+        <div className="profile-logo" style={restaurant.logoUrl ? { backgroundImage: `url(${restaurant.logoUrl})` } : undefined} />
+        <div className="profile-content">
+          <h2>{name}</h2><p>{description || t("noDescription")}</p>
+          <div className="profile-facts">
+            {restaurant.email && <span><Mail />{restaurant.email}</span>}
+            {restaurant.phone && <span><Phone />{restaurant.phone}</span>}
+            <span><Smartphone />{restaurant.whatsapp}</span>
+            {restaurant.address && <span><MapPin />{restaurant.address}</span>}
+            {locationUrl && <a href={locationUrl} target="_blank" rel="noreferrer"><ExternalLink />{t("openMap")}</a>}
+          </div>
+        </div>
+      </article>
+      <div className="profile-branches">
+        {restaurant.branches.map((branch) => (
+          <article className="dash-card" key={branch.id}>
+            <h2>{branch.name}</h2><p><MapPin />{branch.address}</p>
+            <div className="hours-list">
+              {branch.workingHours.map((hour) => <span key={hour.id}><Clock3 />{t(`days.${hour.dayOfWeek}`)}: {hour.isClosed ? t("closed") : `${hour.opensAt} – ${hour.closesAt}`}</span>)}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}

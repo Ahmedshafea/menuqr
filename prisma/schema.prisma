@@ -9,20 +9,20 @@ datasource db {
 }
 
 model User {
-  id                    String               @id @default(cuid())
+  id                    String                       @id @default(cuid())
   name                  String
-  email                 String               @unique
+  email                 String                       @unique
   passwordHash          String
   emailVerified         DateTime?
   image                 String?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
   phone                 String?
-  language              String               @default("ar")
+  language              String                       @default("ar")
   role                  String?
   auditLogs             AuditLog[]
   customerProfile       CustomerProfile?
-  customerOrders        Order[]              @relation("CustomerOrders")
+  customerOrders        Order[]                      @relation("CustomerOrders")
   orderMessages         OrderMessage[]
   orderStatusChanges    OrderStatusHistory[]
   orderActions          OrderActionLog[]
@@ -162,6 +162,8 @@ model Restaurant {
   options           ProductOption[]
   drivers           DeliveryDriver[]
   reviews           RestaurantReview[]
+  latitude          Decimal?                     @db.Decimal(10, 7)
+  longitude         Decimal?                     @db.Decimal(10, 7)
 }
 
 model Branch {
@@ -208,27 +210,27 @@ model Category {
 }
 
 model Product {
-  id                String                    @id @default(cuid())
+  id                String                      @id @default(cuid())
   name              String
   nameAr            String?
   description       String?
   descriptionAr     String?
-  price             Decimal                   @db.Decimal(10, 2)
-  isAvailable       Boolean                   @default(true)
-  availability      ProductAvailability       @default(AVAILABLE)
-  isFeatured        Boolean                   @default(false)
-  sortOrder         Int                       @default(0)
+  price             Decimal                     @db.Decimal(10, 2)
+  isAvailable       Boolean                     @default(true)
+  availability      ProductAvailability         @default(AVAILABLE)
+  isFeatured        Boolean                     @default(false)
+  sortOrder         Int                         @default(0)
   restaurantId      String
   categoryId        String
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
   stock             Int?
   lowStockThreshold Int?
   customerFavorites CustomerFavoriteProduct[]
   extras            Extra[]
   orderItems        OrderItem[]
-  category          Category                  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  restaurant        Restaurant                @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category          Category                    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  restaurant        Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   images            ProductImage[]
   optionGroups      ProductOptionGroupProduct[]
   standaloneOptions ProductOption[]             @relation("StandaloneOptionProduct")
@@ -265,40 +267,42 @@ model Extra {
 }
 
 model Order {
-  id              String         @id @default(cuid())
-  orderNumber     String         @unique
-  customerName    String
-  customerPhone   String
-  deliveryAddress String?
-  notes           String?
-  subtotal        Decimal        @db.Decimal(10, 2)
-  discountAmount  Decimal        @default(0) @db.Decimal(10, 2)
-  deliveryFee     Decimal        @default(0) @db.Decimal(10, 2)
-  serviceFee      Decimal        @default(0) @db.Decimal(10, 2)
-  taxAmount       Decimal        @default(0) @db.Decimal(10, 2)
-  total           Decimal        @db.Decimal(10, 2)
-  status          OrderStatus    @default(NEW)
-  restaurantId    String
-  branchId        String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  accessToken     String         @unique
-  customerUserId  String?
-  branch          Branch?        @relation(fields: [branchId], references: [id])
-  customer        User?          @relation("CustomerOrders", fields: [customerUserId], references: [id], map: "Order_customerId_fkey")
-  restaurant      Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  items           OrderItem[]
-  messages        OrderMessage[]
-  statusHistory   OrderStatusHistory[]
-  actionLogs      OrderActionLog[]
-  driver          DeliveryDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  driverId        String?
-  fulfillmentType FulfillmentType @default(DELIVERY)
-  driverAssignedAt DateTime?
-  outForDeliveryAt DateTime?
-  deliveredAt     DateTime?
+  id                 String               @id @default(cuid())
+  orderNumber        String               @unique
+  customerName       String
+  customerPhone      String
+  deliveryAddress    String?
+  deliveryLatitude   Decimal?             @db.Decimal(10, 7)
+  deliveryLongitude  Decimal?             @db.Decimal(10, 7)
+  notes              String?
+  subtotal           Decimal              @db.Decimal(10, 2)
+  discountAmount     Decimal              @default(0) @db.Decimal(10, 2)
+  deliveryFee        Decimal              @default(0) @db.Decimal(10, 2)
+  serviceFee         Decimal              @default(0) @db.Decimal(10, 2)
+  taxAmount          Decimal              @default(0) @db.Decimal(10, 2)
+  total              Decimal              @db.Decimal(10, 2)
+  status             OrderStatus          @default(NEW)
+  restaurantId       String
+  branchId           String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  accessToken        String               @unique
+  customerUserId     String?
+  branch             Branch?              @relation(fields: [branchId], references: [id])
+  customer           User?                @relation("CustomerOrders", fields: [customerUserId], references: [id], map: "Order_customerId_fkey")
+  restaurant         Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items              OrderItem[]
+  messages           OrderMessage[]
+  statusHistory      OrderStatusHistory[]
+  actionLogs         OrderActionLog[]
+  driver             DeliveryDriver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId           String?
+  fulfillmentType    FulfillmentType      @default(DELIVERY)
+  driverAssignedAt   DateTime?
+  outForDeliveryAt   DateTime?
+  deliveredAt        DateTime?
   estimatedArrivalAt DateTime?
-  review           RestaurantReview?
+  review             RestaurantReview?
 
   @@index([restaurantId, createdAt])
   @@index([customerUserId, createdAt])
@@ -346,18 +350,18 @@ model OrderMessage {
 }
 
 model OrderItem {
-  id          String           @id @default(cuid())
-  productName String
-  unitPrice   Decimal          @db.Decimal(10, 2)
-  quantity    Int
-  notes       String?
-  isComplimentary Boolean @default(false)
-  orderId     String
-  productId   String?
-  order       Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product?         @relation(fields: [productId], references: [id])
-  extras      OrderItemExtra[]
-  options     OrderItemOption[]
+  id              String            @id @default(cuid())
+  productName     String
+  unitPrice       Decimal           @db.Decimal(10, 2)
+  quantity        Int
+  notes           String?
+  isComplimentary Boolean           @default(false)
+  orderId         String
+  productId       String?
+  order           Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product?          @relation(fields: [productId], references: [id])
+  extras          OrderItemExtra[]
+  options         OrderItemOption[]
 
   @@index([orderId])
 }
@@ -414,44 +418,44 @@ model Payment {
 }
 
 model Setting {
-  id                    String     @id @default(cuid())
-  taxRate               Decimal    @default(0) @db.Decimal(5, 2)
-  deliveryFee           Decimal    @default(0) @db.Decimal(10, 2)
-  deliveryFeeType       String     @default("FIXED")
-  serviceFee            Decimal    @default(0) @db.Decimal(10, 2)
-  serviceFeeType        String     @default("FIXED")
-  taxType               String     @default("PERCENTAGE")
-  discountValue         Decimal    @default(0) @db.Decimal(10, 2)
-  discountType          String     @default("FIXED")
-  minimumOrder          Decimal    @default(0) @db.Decimal(10, 2)
-  allowOrdering         Boolean    @default(true)
-  allowOrdersOutsideHours Boolean  @default(false)
-  inventoryTrackingEnabled Boolean @default(false)
-  setupChecklistDismissed Boolean  @default(false)
-  offersDelivery          Boolean  @default(true)
-  offersPickup            Boolean  @default(true)
-  offersDineIn            Boolean  @default(false)
-  restaurantId          String     @unique
-  estimatedOrderMinutes Int        @default(30)
-  restaurant            Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id                       String     @id @default(cuid())
+  taxRate                  Decimal    @default(0) @db.Decimal(5, 2)
+  deliveryFee              Decimal    @default(0) @db.Decimal(10, 2)
+  deliveryFeeType          String     @default("FIXED")
+  serviceFee               Decimal    @default(0) @db.Decimal(10, 2)
+  serviceFeeType           String     @default("FIXED")
+  taxType                  String     @default("PERCENTAGE")
+  discountValue            Decimal    @default(0) @db.Decimal(10, 2)
+  discountType             String     @default("FIXED")
+  minimumOrder             Decimal    @default(0) @db.Decimal(10, 2)
+  allowOrdering            Boolean    @default(true)
+  allowOrdersOutsideHours  Boolean    @default(false)
+  inventoryTrackingEnabled Boolean    @default(false)
+  setupChecklistDismissed  Boolean    @default(false)
+  offersDelivery           Boolean    @default(true)
+  offersPickup             Boolean    @default(true)
+  offersDineIn             Boolean    @default(false)
+  restaurantId             String     @unique
+  estimatedOrderMinutes    Int        @default(30)
+  restaurant               Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 }
 
 model ProductOptionGroup {
-  id           String                      @id @default(cuid())
-  restaurantId String
-  name         String
-  nameAr       String?
-  description  String?
+  id            String                      @id @default(cuid())
+  restaurantId  String
+  name          String
+  nameAr        String?
+  description   String?
   descriptionAr String?
-  isRequired   Boolean                     @default(false)
-  minSelections Int                        @default(0)
-  maxSelections Int                        @default(1)
-  sortOrder    Int                         @default(0)
-  createdAt    DateTime                    @default(now())
-  updatedAt    DateTime                    @updatedAt
-  restaurant   Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  options      ProductOptionGroupItem[]
-  products     ProductOptionGroupProduct[]
+  isRequired    Boolean                     @default(false)
+  minSelections Int                         @default(0)
+  maxSelections Int                         @default(1)
+  sortOrder     Int                         @default(0)
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+  restaurant    Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  options       ProductOptionGroupItem[]
+  products      ProductOptionGroupProduct[]
 
   @@index([restaurantId, sortOrder])
 }
@@ -552,15 +556,15 @@ model RestaurantReview {
 }
 
 model RestaurantNotification {
-  id           String                     @id @default(cuid())
+  id           String                       @id @default(cuid())
   restaurantId String
   type         RestaurantNotificationType
   title        String
   body         String?
   href         String?
   dedupeKey    String?
-  createdAt    DateTime                   @default(now())
-  restaurant   Restaurant                 @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                     @default(now())
+  restaurant   Restaurant                   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   reads        RestaurantNotificationRead[]
 
   @@unique([restaurantId, dedupeKey])
