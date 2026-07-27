@@ -26,6 +26,14 @@ export type DemoRestaurant = {
     offersDelivery?: boolean;
     offersPickup?: boolean;
     offersDineIn?: boolean;
+    deliveryFee?: number;
+    deliveryFeeType?: string;
+    serviceFee?: number;
+    serviceFeeType?: string;
+    taxRate?: number;
+    taxType?: string;
+    discountValue?: number;
+    discountType?: string;
   };
   branches: {
     address: string;

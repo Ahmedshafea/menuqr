@@ -8,6 +8,7 @@ import { RestaurantQr } from "@/components/restaurant-qr";
 import { redirect } from "next/navigation";
 import { NotificationPreferences } from "@/components/notification-preferences";
 import LocationField from "@/components/map/LocationField";
+import { AccordionSection } from "@/components/accordion-section";
 export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const { restaurantId } = await requireTenant();
@@ -195,8 +196,7 @@ export default async function SettingsPage() {
             />
           )}
         </div>
-        <div className="settings-section">
-          <h2>{t("profile")}</h2>
+        <AccordionSection title={t("profile")} className="settings-section">
           <div className="settings-grid">
             <label>
               {t("logo")}
@@ -287,9 +287,8 @@ export default async function SettingsPage() {
               />
             </label>
           </div>
-        </div>
-        <div className="settings-section">
-          <h2>{t("ordering")}</h2>
+        </AccordionSection>
+        <AccordionSection title={t("ordering")} className="settings-section">
           <div className="settings-grid">
             <label className="check-label">
               <input
@@ -330,9 +329,8 @@ export default async function SettingsPage() {
               </select>
             </label>
           </div>
-        </div>
-        <div className="settings-section">
-          <h2>{pricing("title")}</h2>
+        </AccordionSection>
+        <AccordionSection title={pricing("title")} className="settings-section">
           <p>{pricing("description")}</p>
           <div className="settings-grid pricing-settings-grid">
             {[
@@ -392,9 +390,8 @@ export default async function SettingsPage() {
               </fieldset>
             ))}
           </div>
-        </div>
-        <div className="settings-section">
-          <h2>{t("hours")}</h2>
+        </AccordionSection>
+        <AccordionSection title={t("hours")} className="settings-section">
           <div className="working-hours-grid">
             {Array.from({ length: 7 }, (_, day) => {
               const hours = branch?.workingHours.find(
@@ -431,13 +428,11 @@ export default async function SettingsPage() {
               );
             })}
           </div>
-        </div>
-        <div className="settings-section">
-          <h2>{notifications("title")}</h2>
+        </AccordionSection>
+        <AccordionSection title={notifications("title")} className="settings-section">
           <NotificationPreferences labels={{browser:notifications("browser"),sound:notifications("sound"),help:notifications("preferencesHelp")}} />
-        </div>
-        <div className="settings-section qr-settings-section" id="restaurant-qr">
-          <h2>{qr("sectionTitle")}</h2>
+        </AccordionSection>
+        <AccordionSection id="restaurant-qr" title={qr("sectionTitle")} className="settings-section qr-settings-section">
           <p>{qr("sectionHelp")}</p>
           <RestaurantQr
             menuUrl={menuUrl}
@@ -453,7 +448,7 @@ export default async function SettingsPage() {
             }}
           />
           <small>{mvp("futureTables")}</small>
-        </div>
+        </AccordionSection>
         <button className="button primary">
           <Save />
           {common("save")}

@@ -1,4 +1,6 @@
 {
+  "ux":{"previous":"السابق","next":"التالي","productBasics":"البيانات الأساسية","productPricing":"السعر والتوفر","productDetails":"الوصف والتفاصيل","review":"المراجعة","newProduct":"منتج جديد","reviewHelp":"راجع البيانات في الخطوات السابقة ثم احفظ المنتج."},
+  "checkoutUx":{"paymentSummary":"ملخص الدفع","subtotal":"الإجمالي الفرعي","deliveryFee":"رسوم التوصيل","discount":"الخصم","serviceFee":"رسوم الخدمة","tax":"الضريبة","paymentMethod":"طريقة الدفع","cash":"الدفع عند الاستلام","estimatedTime":"الوقت المقدر","minutes":"دقيقة","deliveryAddress":"عنوان التوصيل","grandTotal":"الإجمالي النهائي","confirmOrder":"تأكيد الطلب"},
   "language":{"switch":"تغيير اللغة"},
   "common":{"close":"إغلاق","appName":"MenuQR","viewMenu":"عرض القائمة","search":"بحث…","all":"الكل","save":"حفظ التغييرات","export":"تصدير","available":"متاح","hidden":"مخفي","active":"نشط","cancelled":"ملغي","pending":"قيد الانتظار","completed":"مكتمل","preparing":"قيد التحضير","noData":"لا توجد بيانات بعد","previous":"السابق","next":"التالي"},
   "nav":{"features":"المميزات","pricing":"الأسعار","demo":"قائمة تجريبية","signIn":"تسجيل الدخول","start":"ابدأ مجانًا"},
