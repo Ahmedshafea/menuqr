@@ -6,6 +6,7 @@
   "saveChanges": "حفظ التغييرات",
   "featured": "منتج مميز",
   "importProducts": "استيراد المنتجات",
+  "importPdf": "استيراد من PDF",
   "importDescription": "راجع المتطلبات التالية، ثم نزّل القالب وأضف منتجاتك دون تغيير أسماء الأعمدة.",
   "chooseFile": "اختر ملف Excel أو CSV",
   "startImport": "بدء الاستيراد",

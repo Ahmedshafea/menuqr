@@ -89,3 +89,78 @@ For production, retain `connection_limit=1` for serverless functions, rotate sec
 ## Architecture
 
 The application architecture and Auth.js implementation are unchanged. `src/app` owns routes and API boundaries, `src/components` contains interactive features, `src/lib` contains shared domain utilities, `src/lib/supabase` owns Supabase clients and Storage helpers, and `prisma/schema.prisma` remains the tenant-aware domain model. See [supabase/README.md](supabase/README.md) for the project layout, connection topology, RLS behavior, and provisioning order.
+# AI PDF menu import
+
+Restaurant owners can open **Dashboard → Products → Import from PDF** to upload
+a PDF menu, review the extracted categories and products, and save only the
+approved data.
+
+1. Create an API key in [Google AI Studio](https://aistudio.google.com/apikey).
+2. Add the key to local `.env` and the Vercel project environment:
+
+   ```env
+   GEMINI_API_KEY=your_server_only_key
+   GEMINI_MODEL=gemini-2.5-flash
+   ```
+
+3. Run `npm run db:deploy`. The migration creates the private, temporary
+   `menu-imports` Supabase Storage bucket.
+
+The key is used only by the server. PDFs are limited to 20 MB, uploaded directly
+to the private bucket through a signed URL, processed in one Gemini request, and
+deleted immediately after analysis. The feature uses Gemini's native PDF vision,
+so selectable and scanned menus are handled without a separate OCR service.
+
+## WhatsApp Cloud API
+
+MenuQR includes a server-only Meta WhatsApp Cloud API integration for OTPs,
+approved notification templates, delivery callbacks, incoming messages, and
+template status events.
+
+### Environment variables
+
+```env
+WHATSAPP_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_WABA_ID=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_APP_SECRET=
+WHATSAPP_API_VERSION=v23.0
+WHATSAPP_OTP_TEMPLATE=menuqr_otp
+OTP_HASH_SECRET=
+OTP_EXPIRE_MINUTES=5
+OTP_LENGTH=6
+```
+
+`WHATSAPP_TOKEN` should be a permanent System User token in production.
+`WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
+to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
+characters and can fall back to `AUTH_SECRET`.
+
+### Meta setup
+
+1. Create a Meta app, add WhatsApp, connect a WhatsApp Business Account and copy
+   the Phone Number ID and WABA ID.
+2. Create the approved templates listed in `src/lib/whatsapp.ts`. Template body
+   variables must use the same order passed by the application. Create the
+   authentication template named by `WHATSAPP_OTP_TEMPLATE` with a copy-code or
+   one-tap URL button.
+3. Configure the callback URL as:
+   `https://YOUR_DOMAIN/api/whatsapp/webhook`.
+4. Use the exact `WHATSAPP_VERIFY_TOKEN` as the webhook verify token and
+   subscribe to `messages` and `message_template_status_update`.
+5. Add the environment values to Vercel for Production and Preview, then deploy.
+6. Run `npm run db:deploy` to create the OTP and message delivery tables.
+
+### Endpoints
+
+- `POST /api/whatsapp/send-otp` — `{ "phone": "+201...", "language": "ar" }`
+- `POST /api/whatsapp/verify-otp` — `{ "phone": "+201...", "code": "123456" }`
+- `POST /api/whatsapp/notifications` — authenticated restaurant workspace only
+- `GET /api/whatsapp/templates` — list WABA templates for authenticated staff
+- `GET|POST /api/whatsapp/webhook` — Meta verification and signed callbacks
+
+For local webhook testing, expose localhost with a temporary HTTPS tunnel and
+configure that URL in Meta. Never disable signature verification; use a separate
+Meta test app/number and test recipient instead. OTP values, access tokens and
+phone numbers are intentionally excluded from structured logs.

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/validators";
 import { whatsappUrl } from "@/lib/utils";
 import { isRestaurantOpen } from "@/lib/restaurant-hours";
-import { apiError, rateLimitError } from "@/lib/api";
+import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { auth } from "@/auth";
@@ -11,6 +11,7 @@ import { hash } from "bcryptjs";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { isDemoSlug } from "@/lib/demo-restaurants";
 import { calculateOrderPricing } from "@/lib/order-pricing";
+import { isWhatsAppConfigured, sendCustomerNotification, sendRestaurantNotification } from "@/lib/whatsapp";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -152,7 +153,9 @@ export async function POST(request: Request) {
     discountValue: Number(restaurant.settings.discountValue),
   } : {});
   const number = `MQ-${Date.now().toString(36).toUpperCase()}`;
-  const accessToken = randomBytes(24).toString("base64url");
+  // 72 bits of cryptographic entropy keeps public order links unguessable while
+  // producing a clean 12-character code that is easier to share on WhatsApp.
+  const accessToken = randomBytes(9).toString("base64url");
   if (!session && data.createAccount && data.email) {
     const existingAccount = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true } });
     if (existingAccount) return apiError("ACCOUNT_EXISTS", 409);
@@ -278,6 +281,17 @@ export async function POST(request: Request) {
   const message = arabic
     ? `طلب جديد #${number} من ${data.customerName} إلى ${restaurantName}\n\nعرض الطلب والتواصل مع العميل:\n${trackingUrl}`
     : `New order #${number} from ${data.customerName} for ${restaurantName}\n\nView the order and contact the customer:\n${trackingUrl}`;
+  if (isWhatsAppConfigured()) {
+    const language = arabic ? "ar" : "en";
+    const results = await Promise.allSettled([
+      sendCustomerNotification("order_received", data.customerPhone, [number, restaurantName, trackingUrl], language),
+      sendRestaurantNotification("new_order", restaurant.whatsapp, [number, data.customerName, pricing.total, trackingUrl], language),
+    ]);
+    results.forEach((result, index) => {
+      if (result.status === "rejected")
+        logApiError("whatsapp-order-notification", result.reason, { audience: index === 0 ? "customer" : "restaurant", orderId: order.id });
+    });
+  }
   return Response.json(
     {
       orderId: order.id,

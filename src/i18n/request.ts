@@ -16,7 +16,7 @@ export default getRequestConfig(async () => {
     cookieLocale === "en" || cookieLocale === "ar"
       ? cookieLocale
       : browserLocale;
-  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow, productFormOptions, pricingSettings] = await Promise.all([
+  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow, productFormOptions, pricingSettings, pdfImport] = await Promise.all([
     import(`../../messages/${locale}.json`),
     import(`../../messages/product-tools.${locale}.json`),
     import(`../../messages/order-tracking.${locale}.json`),
@@ -30,6 +30,7 @@ export default getRequestConfig(async () => {
     import(`../../messages/restaurant-workflow.${locale}.json`),
     import(`../../messages/product-form-options.${locale}.json`),
     import(`../../messages/pricing-settings.${locale}.json`),
+    import(`../../messages/pdf-import.${locale}.json`),
   ]);
   return {
     locale,
@@ -47,6 +48,7 @@ export default getRequestConfig(async () => {
       restaurantWorkflow: restaurantWorkflow.default,
       productFormOptions: productFormOptions.default,
       pricingSettings: pricingSettings.default,
+      pdfImport: pdfImport.default,
     },
     timeZone: "Africa/Cairo",
   };
