@@ -3,6 +3,8 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { consumeOtp, OTP_LENGTH } from "@/lib/otp";
+import { normalizeE164 } from "@/lib/whatsapp";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -39,6 +41,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           roles: user.roles.map((item) => item.role),
           restaurantId: user.restaurantMemberships[0]?.restaurantId ?? null,
         };
+      },
+    }),
+    Credentials({
+      id: "whatsapp-otp",
+      name: "WhatsApp OTP",
+      credentials: { phone: {}, code: {} },
+      async authorize(raw) {
+        const parsed = z.object({ phone: z.string().min(8).max(30), code: z.string().regex(/^\d{4,8}$/) }).safeParse(raw);
+        if (!parsed.success || parsed.data.code.length !== OTP_LENGTH) return null;
+        let phone: string;
+        try { phone = normalizeE164(parsed.data.phone); } catch { return null; }
+        const matches = await prisma.user.findMany({
+          where: { phone: { in: [phone, phone.slice(1)] } },
+          take: 2,
+          select: {
+            id: true, name: true, email: true,
+            roles: { select: { role: true } },
+            restaurantMemberships: { select: { restaurantId: true }, orderBy: { createdAt: "asc" }, take: 1 },
+          },
+        });
+        if (matches.length !== 1 || await consumeOtp(phone, parsed.data.code) !== "verified") return null;
+        const user = matches[0];
+        await prisma.user.update({ where: { id: user.id }, data: { phone, phoneVerifiedAt: new Date() } });
+        return { id: user.id, name: user.name, email: user.email, roles: user.roles.map((item) => item.role), restaurantId: user.restaurantMemberships[0]?.restaurantId ?? null };
       },
     }),
   ],

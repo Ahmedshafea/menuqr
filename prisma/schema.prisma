@@ -18,6 +18,7 @@ model User {
   createdAt             DateTime                     @default(now())
   updatedAt             DateTime                     @updatedAt
   phone                 String?
+  phoneVerifiedAt       DateTime?
   language              String                       @default("ar")
   role                  String?
   auditLogs             AuditLog[]
@@ -602,6 +603,38 @@ model RestaurantNotificationRead {
 
   @@id([notificationId, userId])
   @@index([userId, readAt])
+}
+
+model WhatsAppOtp {
+  id         String    @id @default(cuid())
+  phone      String    @unique
+  codeHash   String
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([expiresAt])
+}
+
+model WhatsAppMessage {
+  id               String    @id @default(cuid())
+  metaMessageId    String    @unique
+  notificationType String?
+  templateName     String?
+  direction        String    @default("OUTBOUND")
+  status           String    @default("accepted")
+  errorCode        String?
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  readAt           DateTime?
+  failedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([notificationType, createdAt])
 }
 
 model AnalyticsEvent {

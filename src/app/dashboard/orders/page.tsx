@@ -6,6 +6,8 @@ import { requireTenant } from "@/lib/tenant";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
+import { isWhatsAppConfigured, sendCustomerNotification } from "@/lib/whatsapp";
+import { logApiError } from "@/lib/api";
 export const dynamic = "force-dynamic";
 const statuses = [
   "NEW",
@@ -58,7 +60,7 @@ export default async function OrdersPage({
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
-      select: { currency: true },
+      select: { currency: true, locale: true, name: true, nameAr: true },
     }),
     prisma.order.findMany({
       where,
@@ -76,9 +78,16 @@ export default async function OrdersPage({
     const accessToken = String(form.get("accessToken") ?? "");
     const next = String(form.get("status")) as OrderStatus;
     if (!statuses.includes(next)) return;
-    const order = await prisma.order.findFirst({ where: { id, restaurantId }, select: { id: true,driverId:true } });
+    const order = await prisma.order.findFirst({ where: { id, restaurantId }, select: { id: true,driverId:true,customerPhone:true,orderNumber:true } });
     if (!order||next==="ASSIGNED_TO_DRIVER"&&!order.driverId) return;
     await prisma.$transaction(async tx=>{await tx.order.update({ where: { id }, data: { status: next,...(next==="OUT_FOR_DELIVERY"?{outForDeliveryAt:new Date()} :{}),...(next==="DELIVERED"||next==="COMPLETED"?{deliveredAt:new Date()}: {}) } });await tx.orderStatusHistory.create({ data: { orderId: id, status: next, userId: session.user.id } });await tx.orderActionLog.create({ data: { orderId: id, userId: session.user.id, action: "STATUS_UPDATED", details: { status: next } } });if(order.driverId&&(next==="DELIVERED"||next==="COMPLETED"||next==="FAILED_DELIVERY"))await tx.deliveryDriver.update({where:{id:order.driverId},data:{status:"AVAILABLE"}});if(next==="DELIVERED")await tx.restaurantNotification.create({data:{restaurantId,type:"DELIVERY_COMPLETED",title:"Delivery completed",href:`/order/${accessToken}`}})});
+    const notificationByStatus = { CONFIRMED: "order_accepted", PREPARING: "order_preparing", READY: "order_ready", OUT_FOR_DELIVERY: "order_out_for_delivery", DELIVERED: "order_delivered", COMPLETED: "order_delivered", CANCELLED: "order_cancelled", REJECTED: "order_cancelled" } as const;
+    const notification = notificationByStatus[next as keyof typeof notificationByStatus];
+    if (notification && isWhatsAppConfigured()) {
+      const restaurantName = restaurant.locale === "ar" && restaurant.nameAr ? restaurant.nameAr : restaurant.name;
+      try { await sendCustomerNotification(notification, order.customerPhone, [order.orderNumber, restaurantName], restaurant.locale === "ar" ? "ar" : "en"); }
+      catch (error) { logApiError("whatsapp-order-status", error, { orderId: order.id, status: next }); }
+    }
     revalidatePath("/dashboard/orders");
     if (accessToken) revalidatePath(`/order/${accessToken}`);
     redirect("/dashboard/orders?toast=orderStatusChanged");

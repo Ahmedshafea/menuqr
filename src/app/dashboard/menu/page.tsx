@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Eye, Pencil, Plus } from "lucide-react";
+import { Eye, FileText, Pencil, Plus } from "lucide-react";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -571,6 +571,10 @@ export default async function MenuManagementPage({
           <p>{t("subtitle")}</p>
         </div>
         <div className="menu-header-actions">
+          <Link className="button ghost" href="/dashboard/menu/import-pdf">
+            <FileText />
+            {toolsText("importPdf")}
+          </Link>
           <ProductImportDialog
             labels={{
               title: t("importProducts"),
@@ -579,7 +583,9 @@ export default async function MenuManagementPage({
               upload: t("startImport"),
               templateXlsx: t("downloadXlsx"),
               templateCsv: t("downloadCsv"),
-              success: t("importSuccess"),
+              // The client fills these placeholders after the import response.
+              // Use raw() so next-intl does not try to format them on the server.
+              success: toolsText.raw("importSuccess"),
               error: t("importError"),
               close: common("close"),
               requirementsTitle: toolsText("requirementsTitle"),
@@ -605,7 +611,7 @@ export default async function MenuManagementPage({
               invalidImage: toolsText("invalidImage"),
               invalidDirectImage: toolsText("invalidDirectImage"),
               imageTooLarge: toolsText("imageTooLarge"),
-              rowError: toolsText("rowError"),
+              rowError: toolsText.raw("rowError"),
               productNameError: toolsText("productNameError"),
               categoryError: toolsText("categoryError"),
               priceError: toolsText("priceError"),

@@ -6,6 +6,7 @@
   "saveChanges": "Save changes",
   "featured": "Featured product",
   "importProducts": "Import products",
+  "importPdf": "Import from PDF",
   "importDescription": "Review the requirements below, then download the template and add your products without changing the column names.",
   "chooseFile": "Choose an Excel or CSV file",
   "startImport": "Start import",
