@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import L from "leaflet";
 import { LocateFixed } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 type Coordinates = { lat: number; lng: number };
 
@@ -16,6 +16,15 @@ interface LocationPickerProps {
   readOnly?: boolean;
   autoLocate?: boolean;
   showGoogleLink?: boolean;
+  onAddressResolved?: (address: string, details: {
+    street?: string;
+    district?: string;
+    city?: string;
+    governorate?: string;
+    country?: string;
+    postalCode?: string;
+  }) => void;
+  onAddressError?: () => void;
 }
 
 const DEFAULT_LOCATION: Coordinates = { lat: 30.0444, lng: 31.2357 };
@@ -29,14 +38,19 @@ export default function LocationPicker({
   readOnly = false,
   autoLocate = false,
   showGoogleLink = false,
+  onAddressResolved,
+  onAddressError,
 }: LocationPickerProps) {
   const t = useTranslations("maps");
+  const locale = useLocale();
   const rawId = useId();
   const mapId = `location-map-${rawId.replace(/:/g, "")}`;
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const accuracyRef = useRef<L.Circle | null>(null);
   const onChangeRef = useRef(onChange);
+  const onAddressResolvedRef = useRef(onAddressResolved);
+  const onAddressErrorRef = useRef(onAddressError);
   const [position, setPosition] = useState<Coordinates | null>(() =>
     initialLat != null && initialLng != null
       ? { lat: Number(initialLat), lng: Number(initialLng) }
@@ -44,8 +58,47 @@ export default function LocationPicker({
   );
   const [message, setMessage] = useState("");
   const [locating, setLocating] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { onAddressResolvedRef.current = onAddressResolved; }, [onAddressResolved]);
+  useEffect(() => { onAddressErrorRef.current = onAddressError; }, [onAddressError]);
+
+  const resolveAddress = useCallback(async (lat: number, lng: number) => {
+    if (!onAddressResolvedRef.current) return;
+    setResolving(true);
+    try {
+      const params = new URLSearchParams({
+        format: "jsonv2",
+        lat: String(lat),
+        lon: String(lng),
+        addressdetails: "1",
+        "accept-language": locale,
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error("reverse_geocoding_failed");
+      const result = await response.json() as {
+        display_name?: string;
+        address?: Record<string, string>;
+      };
+      if (!result.display_name) throw new Error("address_not_found");
+      const address = result.address ?? {};
+      onAddressResolvedRef.current(result.display_name, {
+        street: address.road ?? address.pedestrian,
+        district: address.suburb ?? address.neighbourhood ?? address.city_district,
+        city: address.city ?? address.town ?? address.village,
+        governorate: address.state,
+        country: address.country,
+        postalCode: address.postcode,
+      });
+    } catch {
+      onAddressErrorRef.current?.();
+    } finally {
+      setResolving(false);
+    }
+  }, [locale]);
 
   const markerIcon = useCallback(() => L.divIcon({
     className: "menuqr-map-marker",
@@ -60,7 +113,8 @@ export default function LocationPicker({
     markerRef.current?.setLatLng(next);
     if (zoom) mapRef.current?.setView(next, 17, { animate: true });
     onChangeRef.current?.(next.lat, next.lng);
-  }, []);
+    void resolveAddress(next.lat, next.lng);
+  }, [resolveAddress]);
 
   const locate = useCallback(() => {
     if (!navigator.geolocation) { setMessage(t("unsupported")); return; }
@@ -123,6 +177,7 @@ export default function LocationPicker({
         {showGoogleLink && googleUrl && <a className="button ghost" href={googleUrl} target="_blank" rel="noreferrer">{t("openGoogle")}</a>}
       </div>
       {message && <p className="location-help">{message}</p>}
+      {resolving && <small className="location-hint">{t("resolvingAddress")}</small>}
       {!readOnly && <small className="location-hint">{t("dragHint")}</small>}
     </div>
   );

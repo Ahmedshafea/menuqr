@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, LayoutGrid, List, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
+import { ChevronDown, Heart, LayoutGrid, List, MapPin, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -95,6 +95,17 @@ export function MenuClient({
   const defaultAddress = customerDefaults?.addresses.find((item) => item.isDefault) ?? customerDefaults?.addresses[0];
   const [deliveryAddress, setDeliveryAddress] = useState(defaultAddress?.address ?? customerDefaults?.address ?? "");
   const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number | null; lng: number | null }>({ lat: defaultAddress?.latitude ?? null, lng: defaultAddress?.longitude ?? null });
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [addressManuallyEdited, setAddressManuallyEdited] = useState(Boolean(defaultAddress?.address ?? customerDefaults?.address));
+  const [locationMessage, setLocationMessage] = useState("");
+  const [addressDetails, setAddressDetails] = useState({
+    street: "",
+    district: "",
+    city: "",
+    governorate: "",
+    country: "",
+    postalCode: "",
+  });
   const categories = [...new Set(products.map((product) => product.category))];
   const visible = products.filter(
     (product) =>
@@ -206,6 +217,17 @@ export function MenuClient({
         deliveryAddress: form.get("address") || undefined,
         deliveryLatitude: form.get("deliveryLatitude") || undefined,
         deliveryLongitude: form.get("deliveryLongitude") || undefined,
+        street: form.get("street") || undefined,
+        district: form.get("district") || undefined,
+        city: form.get("city") || undefined,
+        governorate: form.get("governorate") || undefined,
+        country: form.get("country") || undefined,
+        postalCode: form.get("postalCode") || undefined,
+        buildingName: form.get("buildingName") || undefined,
+        floor: form.get("floor") || undefined,
+        apartment: form.get("apartment") || undefined,
+        landmark: form.get("landmark") || undefined,
+        deliveryNotes: form.get("deliveryNotes") || undefined,
         fulfillmentType:form.get("fulfillmentType"),
         notes: form.get("notes") || undefined,
         createAccount,
@@ -531,9 +553,57 @@ export function MenuClient({
               <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" checked={fulfillmentType==="DELIVERY"} onChange={()=>setFulfillmentType("DELIVERY")}/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" checked={fulfillmentType==="PICKUP"} onChange={()=>setFulfillmentType("PICKUP")}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" checked={fulfillmentType==="DINE_IN"} onChange={()=>setFulfillmentType("DINE_IN")}/>{demoText("dineIn")}</label>}</div>
               <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
               <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
-                            {fulfillmentType === "DELIVERY" && customerDefaults?.addresses.length ? <select className="saved-address-select" defaultValue={defaultAddress?.id ?? ""} onChange={(event) => { const saved = customerDefaults.addresses.find((item) => item.id === event.target.value); if (saved) { setDeliveryAddress(saved.address); setDeliveryCoordinates({ lat: saved.latitude, lng: saved.longitude }); } else { setDeliveryAddress(""); setDeliveryCoordinates({ lat: null, lng: null }); } }}><option value="">{mapsText("manualAddress")}</option>{customerDefaults.addresses.map((item) => <option value={item.id} key={item.id}>{item.title} — {item.address}</option>)}</select> : null}
-              <input name="address" required={fulfillmentType==="DELIVERY"} placeholder={fulfillmentType==="DELIVERY"?t("addressRequired"):t("address")} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} />
-              {fulfillmentType === "DELIVERY" && <section className="checkout-location"><h3>{mapsText("deliveryTitle")}</h3><LocationField initialLat={deliveryCoordinates.lat} initialLng={deliveryCoordinates.lng} latitudeName="deliveryLatitude" longitudeName="deliveryLongitude" autoLocate={!defaultAddress} onChange={(lat, lng) => setDeliveryCoordinates({ lat, lng })} /></section>}
+              {fulfillmentType === "DELIVERY" && customerDefaults?.addresses.length ? <select className="saved-address-select" defaultValue={defaultAddress?.id ?? ""} onChange={(event) => { const saved = customerDefaults.addresses.find((item) => item.id === event.target.value); if (saved) { setDeliveryAddress(saved.address); setDeliveryCoordinates({ lat: saved.latitude, lng: saved.longitude }); setAddressManuallyEdited(true); } else { setDeliveryAddress(""); setDeliveryCoordinates({ lat: null, lng: null }); setAddressManuallyEdited(false); } }}><option value="">{mapsText("manualAddress")}</option>{customerDefaults.addresses.map((item) => <option value={item.id} key={item.id}>{item.title} — {item.address}</option>)}</select> : null}
+              {fulfillmentType === "DELIVERY" && <>
+                <label className="checkout-address-field">
+                  <span>{checkoutText("deliveryAddress")} *</span>
+                  <textarea name="address" required minLength={5} maxLength={300} rows={3} placeholder={checkoutText("addressExample")} value={deliveryAddress} onChange={(event) => { setDeliveryAddress(event.target.value); setAddressManuallyEdited(true); }} />
+                </label>
+                <input type="hidden" name="deliveryLatitude" value={deliveryCoordinates.lat ?? ""} />
+                <input type="hidden" name="deliveryLongitude" value={deliveryCoordinates.lng ?? ""} />
+                {Object.entries(addressDetails).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
+                <section className="checkout-location-trigger">
+                  <button type="button" className="button ghost" onClick={() => { setLocationMessage(""); setLocationOpen(true); }}><MapPin />{checkoutText("chooseOnMap")}</button>
+                  <small>{checkoutText("mapOptionalHelp")}</small>
+                  {deliveryCoordinates.lat != null && deliveryCoordinates.lng != null && <b>{checkoutText("locationSelected")}</b>}
+                  {locationMessage && <p className="location-help">{locationMessage}</p>}
+                </section>
+                <details className="checkout-address-details">
+                  <summary><span>{checkoutText("additionalDetails")}</span><ChevronDown /></summary>
+                  <div>
+                    <input name="buildingName" maxLength={120} placeholder={checkoutText("buildingName")} />
+                    <input name="floor" maxLength={30} inputMode="numeric" placeholder={checkoutText("floor")} />
+                    <input name="apartment" maxLength={30} inputMode="numeric" placeholder={checkoutText("apartment")} />
+                    <input name="landmark" maxLength={200} placeholder={checkoutText("landmark")} />
+                    <textarea name="deliveryNotes" maxLength={500} rows={3} placeholder={checkoutText("deliveryNotes")} />
+                  </div>
+                </details>
+                {locationOpen && <div className="location-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLocationOpen(false); }}>
+                  <section className="location-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-map-title">
+                    <header><h2 id="checkout-map-title"><MapPin />{checkoutText("chooseOnMap")}</h2><button type="button" className="location-modal-close" onClick={() => setLocationOpen(false)} aria-label={common("close")}><X /></button></header>
+                    <LocationField
+                      initialLat={deliveryCoordinates.lat}
+                      initialLng={deliveryCoordinates.lng}
+                      autoLocate={deliveryCoordinates.lat == null}
+                      onChange={(lat, lng) => setDeliveryCoordinates({ lat, lng })}
+                      onAddressResolved={(address, details) => {
+                        setAddressDetails({
+                          street: details.street ?? "",
+                          district: details.district ?? "",
+                          city: details.city ?? "",
+                          governorate: details.governorate ?? "",
+                          country: details.country ?? "",
+                          postalCode: details.postalCode ?? "",
+                        });
+                        if (!addressManuallyEdited) setDeliveryAddress(address);
+                        setLocationMessage("");
+                      }}
+                      onAddressError={() => setLocationMessage(checkoutText("addressLookupFailed"))}
+                    />
+                    <div className="location-modal-actions"><button type="button" className="button primary" onClick={() => setLocationOpen(false)}>{checkoutText("confirmLocation")}</button></div>
+                  </section>
+                </div>}
+              </>}
               <textarea name="notes" placeholder={t("notes")} />
               <div className="checkout-step-actions"><button type="button" className="button ghost" onClick={() => setCheckoutStep(0)}>{common("previous")}</button><button type="button" className="button primary" onClick={(event) => { if (event.currentTarget.form?.reportValidity()) setCheckoutStep(2); }}>{common("next")}</button></div>
               </div>
