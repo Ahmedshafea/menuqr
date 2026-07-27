@@ -14,6 +14,7 @@ import { ProductImportDialog } from "@/components/product-import-dialog";
 import { DeleteProductButton } from "@/components/delete-product-button";
 import { ProductOptionsEditor } from "@/components/product-options-editor";
 import { parseProductOptions, syncProductOptions } from "@/lib/product-options";
+import { FormWizard } from "@/components/form-wizard";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function MenuManagementPage({
     toolsText,
     productText,
     formOptionsText,
+    ux,
     common,
     locale,
     restaurant,
@@ -43,6 +45,7 @@ export default async function MenuManagementPage({
     getTranslations("productTools"),
     getTranslations("mvpPolish.products"),
     getTranslations("productFormOptions"),
+    getTranslations("ux"),
     getTranslations("common"),
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
@@ -414,7 +417,13 @@ export default async function MenuManagementPage({
       currency: restaurant.currency,
     }).format(value);
   const fields = (product?: (typeof products)[number]) => (
-    <>
+    <FormWizard
+      stepTitles={[ux("productBasics"), ux("productPricing"), ux("productDetails"), formOptionsText("title"), ux("review")]}
+      previousLabel={ux("previous")}
+      nextLabel={ux("next")}
+      finishLabel={product ? t("saveChanges") : t("createProduct")}
+    >
+      <section>
       <label>
         {t("nameEn")}
         <input
@@ -436,6 +445,53 @@ export default async function MenuManagementPage({
           accept="image/jpeg,image/png,image/webp,image/avif"
         />
       </label>
+      {product ? (
+        <label>
+          {t("category")}
+          <select name="categoryId" defaultValue={product.categoryId}>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {locale === "ar" && category.nameAr ? category.nameAr : category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <>
+          {categories.length > 0 && (
+            <label>
+              {t("category")}
+              <select name="categoryId" defaultValue="">
+                <option value="">{t("newCategoryOption")}</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {locale === "ar" && category.nameAr ? category.nameAr : category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>{t("newCategory")}<input name="newCategory" /></label>
+          <label>{t("newCategoryAr")}<input name="newCategoryAr" dir="rtl" /></label>
+        </>
+      )}
+      </section>
+      <section>
+      <label>
+        {t("price")}
+        <input name="price" type="number" inputMode="decimal" min="0" step="0.01" defaultValue={product ? Number(product.price) : undefined} required />
+      </label>
+      <label>
+        {t("stock")}
+        <input name="stock" type="number" inputMode="numeric" min="0" defaultValue={product?.stock ?? ""} />
+      </label>
+      <label className="check-label">
+        <input name="isAvailable" type="checkbox" defaultChecked={product?.isAvailable ?? true} />
+        {common("available")}
+      </label>
+      {product && <label className="check-label"><input name="isFeatured" type="checkbox" defaultChecked={product.isFeatured} />{toolsText("featured")}</label>}
+      </section>
+      <section>
       <label className="full">
         {t("descriptionEn")}
         <textarea
@@ -451,84 +507,8 @@ export default async function MenuManagementPage({
           dir="rtl"
         />
       </label>
-      <label>
-        {t("price")}
-        <input
-          name="price"
-          type="number"
-          min="0"
-          step="0.01"
-          defaultValue={product ? Number(product.price) : undefined}
-          required
-        />
-      </label>
-      <label>
-        {t("stock")}
-        <input
-          name="stock"
-          type="number"
-          min="0"
-          defaultValue={product?.stock ?? ""}
-        />
-      </label>
-      {product ? (
-        <label>
-          {t("category")}
-          <select name="categoryId" defaultValue={product.categoryId}>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {locale === "ar" && category.nameAr
-                  ? category.nameAr
-                  : category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        <>
-          {categories.length > 0 && (
-            <label>
-              {t("category")}
-              <select name="categoryId" defaultValue="">
-                <option value="">{t("newCategoryOption")}</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {locale === "ar" && category.nameAr
-                      ? category.nameAr
-                      : category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label>
-            {t("newCategory")}
-            <input name="newCategory" />
-          </label>
-          <label>
-            {t("newCategoryAr")}
-            <input name="newCategoryAr" dir="rtl" />
-          </label>
-        </>
-      )}
-      <label className="check-label">
-        <input
-          name="isAvailable"
-          type="checkbox"
-          defaultChecked={product?.isAvailable ?? true}
-        />
-        {common("available")}
-      </label>
-      {product && (
-        <label className="check-label">
-          <input
-            name="isFeatured"
-            type="checkbox"
-            defaultChecked={product.isFeatured}
-          />
-          {toolsText("featured")}
-        </label>
-      )}
+      </section>
+      <section>
       <ProductOptionsEditor
         existingOptions={reusableOptions.map((option) => ({
           id: option.id,
@@ -572,7 +552,14 @@ export default async function MenuManagementPage({
           remove: formOptionsText("remove"),
         }}
       />
-    </>
+      </section>
+      <section>
+        <div className="product-review-card">
+          <strong>{product?.name || ux("newProduct")}</strong>
+          <p>{ux("reviewHelp")}</p>
+        </div>
+      </section>
+    </FormWizard>
   );
   return (
     <section className="dash-main">
@@ -636,9 +623,6 @@ export default async function MenuManagementPage({
               <h2>{t("addProduct")}</h2>
               <form action={createProduct} className="settings-grid">
                 {fields()}
-                <button className="button primary full">
-                  {t("createProduct")}
-                </button>
               </form>
             </div>
           </details>
@@ -712,9 +696,6 @@ export default async function MenuManagementPage({
                           >
                             <input type="hidden" name="id" value={product.id} />
                             {fields(product)}
-                            <button className="button primary full">
-                              {t("saveChanges")}
-                            </button>
                           </form>
                         </div>
                       </details>

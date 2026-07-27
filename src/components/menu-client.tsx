@@ -1,11 +1,11 @@
 "use client";
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Heart, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import LocationField from "@/components/map/LocationField";
+import { calculateOrderPricing } from "@/lib/order-pricing";
 const TurnstileWidget = dynamic(
   () =>
     import("@/components/turnstile-widget").then(
@@ -35,7 +35,15 @@ export function MenuClient({
   customerDefaults,
   demo = false,
 }: {
-  restaurant: { name: string; slug: string; currency: string; fulfillment:{delivery:boolean;pickup:boolean;dineIn:boolean} };
+  restaurant: {
+    name: string;
+    phone?: string | null;
+    slug: string;
+    currency: string;
+    estimatedMinutes: number;
+    fulfillment:{delivery:boolean;pickup:boolean;dineIn:boolean};
+    pricing:{deliveryFee:number;deliveryFeeType:string;serviceFee:number;serviceFeeType:string;taxRate:number;taxType:string;discountValue:number;discountType:string};
+  };
   products: MenuProduct[];
   orderingEnabled?: boolean;
   initialCart?: Record<string, number>;
@@ -52,6 +60,8 @@ export function MenuClient({
   const validationText = useTranslations("restaurantWorkflow.validation");
   const optionText = useTranslations("productFormOptions");
   const mapsText = useTranslations("maps");
+  const checkoutText = useTranslations("checkoutUx");
+  const productDetailsText = useTranslations("productDetails");
   const locale = useLocale();
   const defaultFulfillment = restaurant.fulfillment.delivery
     ? "DELIVERY"
@@ -65,12 +75,14 @@ export function MenuClient({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
-  const [fulfillmentType, setFulfillmentType] = useState(defaultFulfillment);
+  const [fulfillmentType, setFulfillmentType] = useState<"DELIVERY" | "PICKUP" | "DINE_IN">(defaultFulfillment);
   const [createAccount, setCreateAccount] = useState(false);
   const [selectedExtras, setSelectedExtras] =
     useState<Record<string, string[]>>(initialSelectedExtras);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [demoPreview, setDemoPreview] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState(0);
   const defaultAddress = customerDefaults?.addresses.find((item) => item.isDefault) ?? customerDefaults?.addresses[0];
   const [deliveryAddress, setDeliveryAddress] = useState(defaultAddress?.address ?? customerDefaults?.address ?? "");
   const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number | null; lng: number | null }>({ lat: defaultAddress?.latitude ?? null, lng: defaultAddress?.longitude ?? null });
@@ -90,6 +102,10 @@ export function MenuClient({
         return sum + (cart[product.id] || 0) * Math.max(0, product.price + extrasTotal);
       }, 0),
     [cart, products, selectedExtras],
+  );
+  const pricing = useMemo(
+    () => calculateOrderPricing(total, fulfillmentType, restaurant.pricing),
+    [fulfillmentType, restaurant.pricing, total],
   );
   const money = (value: number) =>
     new Intl.NumberFormat(locale, {
@@ -166,7 +182,7 @@ export function MenuClient({
         return `• ${item.quantity} × ${item.name}${selected}`;
       });
       setDemoPreview(
-        `${demoText("previewTitle")}\n${restaurant.name}\n\n${lines.join("\n")}\n\n${t("total")}: ${money(total)}\n\n${demoText("notSent")}`,
+        `${demoText("previewTitle")}\n${restaurant.name}\n\n${lines.join("\n")}\n\n${t("total")}: ${money(pricing.total)}\n\n${demoText("notSent")}`,
       );
       setLoading(false);
       return;
@@ -258,9 +274,11 @@ export function MenuClient({
                     <Heart />
                   </button>
                 )}
-                <Link
-                  href={`/menu/${restaurant.slug}/product/${product.id}`}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProduct(product)}
                   className="product-detail-link"
+                  aria-label={product.name}
                 >
                   <div className="product-photo">
                     {product.image && (
@@ -274,14 +292,12 @@ export function MenuClient({
                     {product.featured && <span>{t("featured")}</span>}
                     {!product.available && <span className="unavailable-badge">{productText("temporary")}</span>}
                   </div>
-                </Link>
+                </button>
                 <div className="product-info">
                   <div>
-                    <Link
-                      href={`/menu/${restaurant.slug}/product/${product.id}`}
-                    >
+                    <button type="button" className="product-name-button" onClick={() => setSelectedProduct(product)}>
                       <h3>{product.name}</h3>
-                    </Link>
+                    </button>
                     <p>{product.description}</p>
                     <strong>{money(product.price)}</strong>
                   </div>
@@ -309,6 +325,41 @@ export function MenuClient({
               </article>
             ))}
           </div>
+          {selectedProduct && (
+            <div className="product-sheet-overlay" role="presentation" onMouseDown={() => setSelectedProduct(null)}>
+              <section className="product-sheet" role="dialog" aria-modal="true" aria-label={selectedProduct.name} onMouseDown={(event) => event.stopPropagation()}>
+                <button type="button" className="close" aria-label={common("close")} onClick={() => setSelectedProduct(null)}><X /></button>
+                <div className="product-sheet-image">
+                  {selectedProduct.image && <Image src={selectedProduct.image} alt={selectedProduct.name} fill sizes="(max-width: 768px) 100vw, 520px" />}
+                  {selectedProduct.featured && <span>{t("featured")}</span>}
+                </div>
+                <div className="product-sheet-copy">
+                  <h2>{selectedProduct.name}</h2>
+                  <p>{selectedProduct.description}</p>
+                  <strong>{money(selectedProduct.price)}</strong>
+                  {[...selectedProduct.optionGroups.map((group) => ({...group, standalone:false})), ...(selectedProduct.extras.filter((extra) => !selectedProduct.optionGroups.some((group) => group.options.some((option) => option.id === extra.id))).length ? [{id:"extras",name:productDetailsText("extras"),required:false,min:0,max:999,options:selectedProduct.extras.filter((extra) => !selectedProduct.optionGroups.some((group) => group.options.some((option) => option.id === extra.id))),standalone:true}] : [])].map((group) => (
+                    <fieldset key={group.id}>
+                      <legend>{group.name}<small>{group.required ? optionText("required") : optionText("optional")}</small></legend>
+                      {group.options.map((option) => {
+                        const checked = selectedExtras[selectedProduct.id]?.includes(option.id) ?? false;
+                        return <label key={option.id}><input type={group.required && group.max === 1 ? "radio" : "checkbox"} checked={checked} onChange={(event) => toggleOption(selectedProduct, group, option.id, event.target.checked)} /><span>{option.name}</span><small>{option.price ? `+ ${money(option.price)}` : optionText("free")}</small></label>;
+                      })}
+                    </fieldset>
+                  ))}
+                </div>
+                <div className="product-sheet-action">
+                  <div className="qty">
+                    <button type="button" aria-label="Decrease" onClick={() => update(selectedProduct.id, -1)}><Minus /></button>
+                    <b>{cart[selectedProduct.id] ?? 0}</b>
+                    <button type="button" aria-label="Increase" onClick={() => update(selectedProduct.id, 1)}><Plus /></button>
+                  </div>
+                  <button type="button" className="button primary" disabled={!selectedProduct.available} onClick={() => { if (!cart[selectedProduct.id]) update(selectedProduct.id, 1); setSelectedProduct(null); }}>
+                    <ShoppingBag />{productDetailsText("orderNow")}
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
         </>
       ) : (
         <p>{t("empty")}</p>
@@ -320,7 +371,7 @@ export function MenuClient({
             {t("cart", { count })}
           </span>
           <b>
-            {t("viewOrder")} · {money(total)}
+            {t("viewOrder")} · {money(pricing.total)}
           </b>
         </button>
       )}
@@ -332,6 +383,8 @@ export function MenuClient({
             </button>
             <h2>{t("yourOrder")}</h2>
             <p>{t("checkoutHelp")}</p>
+            <div className="checkout-step-progress"><i style={{width:`${((checkoutStep+1)/3)*100}%`}}/><span>{checkoutStep+1} / 3</span></div>
+            <div className={`checkout-step-panel ${checkoutStep === 0 ? "is-active" : ""}`}>
             <div className="cart-lines">
               {products
                 .filter((product) => cart[product.id])
@@ -456,9 +509,12 @@ export function MenuClient({
             </div>
             <div className="cart-total">
               <span>{t("total")}</span>
-              <strong>{money(total)}</strong>
+              <strong>{money(pricing.total)}</strong>
+            </div>
+            <div className="checkout-step-actions"><button type="button" className="button primary" onClick={() => setCheckoutStep(1)}>{common("next")}</button></div>
             </div>
             <form onSubmit={checkout}>
+              <div className={`checkout-step-panel ${checkoutStep === 1 ? "is-active" : ""}`}>
               <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" checked={fulfillmentType==="DELIVERY"} onChange={()=>setFulfillmentType("DELIVERY")}/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" checked={fulfillmentType==="PICKUP"} onChange={()=>setFulfillmentType("PICKUP")}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" checked={fulfillmentType==="DINE_IN"} onChange={()=>setFulfillmentType("DINE_IN")}/>{demoText("dineIn")}</label>}</div>
               <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
               <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
@@ -466,6 +522,24 @@ export function MenuClient({
               <input name="address" required={fulfillmentType==="DELIVERY"} placeholder={fulfillmentType==="DELIVERY"?t("addressRequired"):t("address")} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} />
               {fulfillmentType === "DELIVERY" && <section className="checkout-location"><h3>{mapsText("deliveryTitle")}</h3><LocationField initialLat={deliveryCoordinates.lat} initialLng={deliveryCoordinates.lng} latitudeName="deliveryLatitude" longitudeName="deliveryLongitude" autoLocate={!defaultAddress} onChange={(lat, lng) => setDeliveryCoordinates({ lat, lng })} /></section>}
               <textarea name="notes" placeholder={t("notes")} />
+              <div className="checkout-step-actions"><button type="button" className="button ghost" onClick={() => setCheckoutStep(0)}>{common("previous")}</button><button type="button" className="button primary" onClick={(event) => { if (event.currentTarget.form?.reportValidity()) setCheckoutStep(2); }}>{common("next")}</button></div>
+              </div>
+              <div className={`checkout-step-panel ${checkoutStep === 2 ? "is-active" : ""}`}>
+              <section className="checkout-summary" aria-labelledby="checkout-summary-title">
+                <header>
+                  <div><small>{restaurant.name}</small><h3 id="checkout-summary-title">{checkoutText("paymentSummary")}</h3></div>
+                  {restaurant.phone && <a href={`tel:${restaurant.phone}`}>{restaurant.phone}</a>}
+                </header>
+                <div><span>{checkoutText("subtotal")}</span><b>{money(pricing.subtotal)}</b></div>
+                {fulfillmentType === "DELIVERY" && <div><span>{checkoutText("deliveryFee")}</span><b>{money(pricing.deliveryFee)}</b></div>}
+                {pricing.discountAmount > 0 && <div className="discount-line"><span>{checkoutText("discount")}</span><b>− {money(pricing.discountAmount)}</b></div>}
+                {pricing.serviceFee > 0 && <div><span>{checkoutText("serviceFee")}</span><b>{money(pricing.serviceFee)}</b></div>}
+                {pricing.taxAmount > 0 && <div><span>{checkoutText("tax")}</span><b>{money(pricing.taxAmount)}</b></div>}
+                <div><span>{checkoutText("paymentMethod")}</span><b>{checkoutText("cash")}</b></div>
+                <div><span>{checkoutText("estimatedTime")}</span><b>{restaurant.estimatedMinutes} {checkoutText("minutes")}</b></div>
+                {fulfillmentType === "DELIVERY" && deliveryAddress && <p><strong>{checkoutText("deliveryAddress")}</strong>{deliveryAddress}</p>}
+                <footer><span>{checkoutText("grandTotal")}</span><strong>{money(pricing.total)}</strong></footer>
+              </section>
               {!demo && !customerDefaults && <section className="checkout-account-choice">
                 <h3>{accountT("saveInfoTitle")}</h3>
                 <p>{accountT("saveInfoText")}</p>
@@ -484,8 +558,9 @@ export function MenuClient({
               </section>}
               {!demo && <TurnstileWidget onToken={setTurnstileToken} />}
               {error && <p className="form-error">{error}</p>}
+              <div className="checkout-step-actions"><button type="button" className="button ghost" onClick={() => setCheckoutStep(1)}>{common("previous")}</button></div>
               <button className="button primary large" disabled={loading}>
-                {loading ? common("noData") : demo ? demoText("generatePreview") : t("whatsapp")}
+                {loading ? common("noData") : demo ? demoText("generatePreview") : checkoutText("confirmOrder")}
               </button>
               {demoPreview && (
                 <section className="demo-order-preview">
@@ -493,6 +568,7 @@ export function MenuClient({
                   <pre>{demoPreview}</pre>
                 </section>
               )}
+              </div>
             </form>
           </div>
         </div>
