@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
 export const dynamic = "force-dynamic";
 const statuses = [
   "NEW",
@@ -96,7 +97,7 @@ export default async function OrdersPage({
           <p>{t("subtitle")}</p>
         </div>
       </header>
-      <article className="dash-card management-card">
+      <DashboardDisclosure title={t("title")} summary={total} className="management-card">
         <form className="management-toolbar">
           <div className="dashboard-search">
             <input name="q" defaultValue={params.q} placeholder={t("search")} />
@@ -110,6 +111,18 @@ export default async function OrdersPage({
           <button className="button ghost">{common("search")}</button>
         </form>
         {orders.length ? (
+          <>
+          <div className="mobile-record-list">
+            {orders.map((order) => (
+              <RecordDisclosure key={order.id} title={`#${order.orderNumber}`} meta={money(Number(order.total))}>
+                <p><b>{t("customer")}</b><span>{order.customerName}</span></p>
+                <p><b>{t("phone")}</b><span>{order.customerPhone}</span></p>
+                <p><b>{t("items")}</b><span>{order._count.items}</span></p>
+                <p><b>{t("status")}</b><span>{flow(`statuses.${order.status}`)}</span></p>
+                <Link className="button primary" href={`/order/${order.accessToken}`}>{t("order")}</Link>
+              </RecordDisclosure>
+            ))}
+          </div>
           <table className="w-full">
             <thead className="hidden md:table-header-group">
               <tr>
@@ -162,7 +175,7 @@ export default async function OrdersPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></>
 
         ) : (
           <div className="friendly-empty"><h2>{empty("ordersTitle")}</h2><p>{empty("ordersHelp")}</p></div>
@@ -176,7 +189,7 @@ export default async function OrdersPage({
             <a href={`?page=${page + 1}`}>{common("next")}</a>
           )}
         </div>
-      </article>
+      </DashboardDisclosure>
     </section>
   );
 }

@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { Copy, Gift, History, MessageCircle, Minus, Phone, Plus, RefreshCw, Store, Trash2, UserRound } from "lucide-react";
+import { Copy, Gift, MessageCircle, Minus, Phone, Plus, RefreshCw, Store, Trash2, UserRound } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { whatsappUrl } from "@/lib/utils";
@@ -17,6 +17,7 @@ import {
   OrderPrintActions,
 } from "@/components/order-workspace-actions";
 import { OrderLocationActions } from "@/components/order-location-actions";
+import { AccordionSection } from "@/components/accordion-section";
 
 export const dynamic = "force-dynamic";
 
@@ -623,8 +624,7 @@ export default async function OrderTrackingPage({
         )}
         <section className="order-layout">
           <div className="order-column">
-            <article className="order-card order-items-card">
-              <h2>{t("items")}</h2>
+            <AccordionSection title={t("items")} className="order-card order-items-card">
               {order.items.map((item) => (
                 <div className="tracking-item" key={item.id}>
                   <span
@@ -663,8 +663,8 @@ export default async function OrderTrackingPage({
                 </div>
               ))}
               {isRestaurant && <form action={addComplimentary} className="complimentary-form"><select name="productId">{order.restaurant.products.map(product=><option value={product.id} key={product.id}>{locale==="ar"&&product.nameAr?product.nameAr:product.name}</option>)}</select><button className="button ghost"><Gift />{flow("complimentary")}</button></form>}
-            </article>
-            <article className="order-card order-pricing-card">
+            </AccordionSection>
+            <AccordionSection title={t("total")} className="order-card order-pricing-card">
               <div className="order-pricing-summary">
                 <p><span>{t("subtotal")}</span><b>{money(Number(order.subtotal))}</b></p>
                 <p><span>{t("discount")}</span><b>- {money(Number(order.discountAmount))}</b></p>
@@ -675,12 +675,11 @@ export default async function OrderTrackingPage({
               </div>
               {isRestaurant && <form action={sendApprovalRequest}><button className="button whatsapp-button approval-button"><MessageCircle />{flow("sendApproval")}</button></form>}
               {isRestaurant&&order.fulfillmentType==="DELIVERY"&&<form action={assignDriver} className="driver-assignment"><select name="driverId" defaultValue={order.driverId??""}><option value="">{deliveryText("assign")}</option>{order.restaurant.drivers.filter(driver=>driver.status!=="OFFLINE"||driver.id===order.driverId).map(driver=><option key={driver.id} value={driver.id}>{driver.name} · {deliveryText(driver.status.toLowerCase() as "available"|"busy"|"offline")}</option>)}</select><button className="button primary">{deliveryText("assign")}</button></form>}
-            </article>
+            </AccordionSection>
             {order.driver&&<article className="order-card driver-public-card">{order.driver.photoUrl&&<span style={{backgroundImage:`url(${order.driver.photoUrl})`}}/>}<div><h2>{order.driver.name}</h2><p>{order.driver.vehicleType}</p><a href={`tel:${order.driver.phone}`}>{order.driver.phone}</a>{order.driver.whatsapp&&<a className="button whatsapp-button" href={`https://wa.me/${order.driver.whatsapp}`}>{deliveryText("whatsapp")}</a>}{order.status==="OUT_FOR_DELIVERY"&&order.deliveryLatitude!=null&&order.deliveryLongitude!=null&&<a className="button ghost" target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${Number(order.deliveryLatitude)},${Number(order.deliveryLongitude)}`}>{mapsText("openGoogle")}</a>}{order.estimatedArrivalAt&&<small>{deliveryText("eta")}: {new Intl.DateTimeFormat(locale,{timeStyle:"short"}).format(order.estimatedArrivalAt)}</small>}</div></article>}
             {order.status==="COMPLETED"&&!order.review&&<article className="order-card"><h2>{reviewText("title")}</h2><form action={submitReview} className="review-form">{[["foodQuality","food"],["deliverySpeed","speed"],["packaging","packaging"],["overall","overall"]].map(([name,key])=><label key={name}>{reviewText(key as "food"|"speed"|"packaging"|"overall")}<select name={name} required defaultValue="5">{[5,4,3,2,1].map(value=><option key={value} value={value}>{"★".repeat(value)}</option>)}</select></label>)}<textarea name="comment" maxLength={1000} placeholder={reviewText("comment")}/><button className="button primary">{reviewText("submit")}</button></form></article>}
             {isRestaurant&&order.review&&<article className="order-card order-review-card"><header><h2>{t("rating")}</h2><span>{t(order.review.status==="PUBLISHED"?"published":order.review.status==="HIDDEN"?"hidden":"pendingReview")}</span></header><div><p><b>{order.review.foodQuality}/5</b>{t("foodRating")}</p><p><b>{order.review.deliverySpeed}/5</b>{t("deliveryRating")}</p><p><b>{order.review.packaging}/5</b>{t("packagingRating")}</p><p><b>{order.review.overall}/5</b>{t("overallRating")}</p></div>{order.review.comment&&<blockquote>{order.review.comment}</blockquote>}<form action={moderateReview}><button name="status" value="PUBLISHED" className="button primary">{t("publish")}</button><button name="status" value="HIDDEN" className="button ghost">{t("hide")}</button></form></article>}
-            <article className="order-card order-conversation-card">
-              <h2>{t("conversation")}</h2>
+            <AccordionSection title={t("conversation")} className="order-card order-conversation-card">
               <div className="order-messages">
                 {order.messages.length ? (
                   order.messages.map((message) => {
@@ -721,10 +720,10 @@ export default async function OrderTrackingPage({
                   {t("send")}
                 </button>
               </form>
-            </article>
+            </AccordionSection>
           </div>
           <aside className="order-column">
-            <details className="order-card order-details customer-details" open>
+            <details className="order-card order-details customer-details">
               <summary>
                 <h2>{t("customer")}</h2>
                 <span className={order.customerUserId ? "saved-customer" : "guest-customer"}>
@@ -781,19 +780,17 @@ export default async function OrderTrackingPage({
                 </div>
               )}
             </details>
-            <article className="order-card order-timeline-card">
-              <h2><History />{flow("timeline")}</h2>
+            <AccordionSection title={flow("timeline")} className="order-card order-timeline-card">
               <div className="order-timeline">
                 {timelineStatuses.filter((status) => status === order.status || order.statusHistory.some((item) => item.status === status)).map((status) => {
                   const entry = [...order.statusHistory].reverse().find((item) => item.status === status);
                   return <div className={`timeline-entry ${entry ? `status-${status.toLowerCase()} completed-step` : "pending-step"}`} key={status}><i /><time>{entry ? new Intl.DateTimeFormat(locale,{hour:"2-digit",minute:"2-digit"}).format(entry.createdAt) : "—"}</time><strong>{t(`statuses.${status}`)}</strong></div>;
                 })}
               </div>
-            </article>
-            {isRestaurant && order.actionLogs.length > 0 && <article className="order-card"><h2>{flow("actionLog")}</h2><div className="order-action-log">{order.actionLogs.map(log=><div key={log.id}><span><b>{log.user?.name??restaurantName}</b>{flow.has(`actions.${log.action}`)?flow(`actions.${log.action}`):log.action}</span><time>{new Intl.DateTimeFormat(locale,{dateStyle:"short",timeStyle:"short"}).format(log.createdAt)}</time></div>)}</div></article>}
+            </AccordionSection>
+            {isRestaurant && order.actionLogs.length > 0 && <AccordionSection title={flow("actionLog")} className="order-card"><div className="order-action-log">{order.actionLogs.map(log=><div key={log.id}><span><b>{log.user?.name??restaurantName}</b>{flow.has(`actions.${log.action}`)?flow(`actions.${log.action}`):log.action}</span><time>{new Intl.DateTimeFormat(locale,{dateStyle:"short",timeStyle:"short"}).format(log.createdAt)}</time></div>)}</div></AccordionSection>}
             {!order.customerUserId && !isRestaurant && (
-              <article className="order-card">
-                <h2>{t("createAccount")}</h2>
+              <AccordionSection title={t("createAccount")} className="order-card">
                 <p>{t("accountHelp")}</p>
                 {result === "invalid" && (
                   <p className="form-error">{t("invalidAccount")}</p>
@@ -822,7 +819,7 @@ export default async function OrderTrackingPage({
                   </label>
                   <button className="button primary">{t("register")}</button>
                 </form>
-              </article>
+              </AccordionSection>
             )}
             {(result === "created" || isLinkedCustomer) && (
               <p className="form-success">{t("accountCreated")}</p>

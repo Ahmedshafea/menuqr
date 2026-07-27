@@ -383,3 +383,7 @@
   .driver-assignment { grid-template-columns: 1fr; }
   .driver-assignment .button { width: 100%; }
 }
+
+/* Collapsed order sections */
+.order-card.ux-accordion{padding:0;overflow:hidden}.order-card.ux-accordion .ux-accordion-trigger{min-height:60px;padding:15px 18px}.order-card.ux-accordion .ux-accordion-content{padding-inline:18px}.customer-details{padding:0!important;overflow:hidden}.customer-details>summary{min-height:60px;padding:15px 18px}.customer-details>summary::after{content:"";width:9px;height:9px;margin-inline-start:auto;border-inline-end:2px solid currentColor;border-block-end:2px solid currentColor;transform:rotate(45deg);transition:transform .2s ease}.customer-details[open]>summary::after{transform:rotate(225deg)}.customer-details>p,.customer-details>.customer-metrics,.customer-details>.customer-actions-grid{margin-inline:18px}.customer-details>.customer-actions-grid{margin-bottom:18px}
+@media(max-width:768px){.order-layout .order-column>.ux-accordion{order:60}.order-layout .order-items-card{order:10}.order-layout .order-pricing-card{order:20}.order-layout .customer-details{order:30}.order-layout .order-timeline-card{order:40}.order-layout .order-conversation-card{order:80}.order-card.ux-accordion .ux-accordion-trigger,.customer-details>summary{min-height:54px;padding:12px 13px}.order-card.ux-accordion .ux-accordion-content{padding-inline:12px}.customer-details>p,.customer-details>.customer-metrics,.customer-details>.customer-actions-grid{margin-inline:13px}}
