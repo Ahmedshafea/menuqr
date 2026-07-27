@@ -72,16 +72,27 @@ model CustomerProfile {
 }
 
 model CustomerAddress {
-  id         String          @id @default(cuid())
-  customerId String
-  title      String
-  address    String
-  latitude   Decimal?        @db.Decimal(10, 7)
-  longitude  Decimal?        @db.Decimal(10, 7)
-  isDefault  Boolean         @default(false)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id            String          @id @default(cuid())
+  customerId    String
+  title         String
+  address       String
+  latitude      Decimal?        @db.Decimal(10, 7)
+  longitude     Decimal?        @db.Decimal(10, 7)
+  street        String?
+  district      String?
+  city          String?
+  governorate   String?
+  country       String?
+  postalCode    String?
+  buildingName  String?
+  floor         String?
+  apartment     String?
+  landmark      String?
+  deliveryNotes String?
+  isDefault     Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  customer      CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId, isDefault])
 }
@@ -274,6 +285,17 @@ model Order {
   deliveryAddress    String?
   deliveryLatitude   Decimal?             @db.Decimal(10, 7)
   deliveryLongitude  Decimal?             @db.Decimal(10, 7)
+  street             String?
+  district           String?
+  city               String?
+  governorate        String?
+  country            String?
+  postalCode         String?
+  buildingName       String?
+  floor              String?
+  apartment          String?
+  landmark           String?
+  deliveryNotes      String?
   notes              String?
   subtotal           Decimal              @db.Decimal(10, 2)
   discountAmount     Decimal              @default(0) @db.Decimal(10, 2)
