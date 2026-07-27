@@ -1,6 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
-import { Heart, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Heart, LayoutGrid, List, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -83,6 +83,15 @@ export function MenuClient({
   const [demoPreview, setDemoPreview] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
   const [checkoutStep, setCheckoutStep] = useState(0);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  useEffect(() => {
+    const saved = window.localStorage.getItem("menuqr-menu-view");
+    if (saved === "grid" || saved === "list") setViewMode(saved);
+  }, []);
+  const changeViewMode = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    window.localStorage.setItem("menuqr-menu-view", mode);
+  };
   const defaultAddress = customerDefaults?.addresses.find((item) => item.isDefault) ?? customerDefaults?.addresses[0];
   const [deliveryAddress, setDeliveryAddress] = useState(defaultAddress?.address ?? customerDefaults?.address ?? "");
   const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number | null; lng: number | null }>({ lat: defaultAddress?.latitude ?? null, lng: defaultAddress?.longitude ?? null });
@@ -254,8 +263,12 @@ export function MenuClient({
                 </button>
               ))}
             </div>
+            <div className="menu-view-toggle" aria-label={t("viewOrder")}>
+              <button type="button" className={viewMode === "grid" ? "active" : ""} onClick={() => changeViewMode("grid")} aria-label={checkoutText("gridView")}><LayoutGrid /></button>
+              <button type="button" className={viewMode === "list" ? "active" : ""} onClick={() => changeViewMode("list")} aria-label={checkoutText("listView")}><List /></button>
+            </div>
           </div>
-          <div className="product-grid">
+          <div className={`product-grid mobile-${viewMode}`}>
             {visible.map((product) => (
               <article className="product-card" key={product.id}>
                 {demo && (
@@ -293,7 +306,7 @@ export function MenuClient({
                     {!product.available && <span className="unavailable-badge">{productText("temporary")}</span>}
                   </div>
                 </button>
-                <div className="product-info">
+                <div className="product-info" dir={locale === "ar" ? "rtl" : "ltr"}>
                   <div>
                     <button type="button" className="product-name-button" onClick={() => setSelectedProduct(product)}>
                       <h3>{product.name}</h3>

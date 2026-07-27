@@ -5,6 +5,7 @@ import { getDashboardData } from "@/lib/dashboard-data";
 import { requireTenant } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +35,9 @@ export default async function Dashboard() {
     await prisma.setting.updateMany({ where: { restaurantId }, data: { setupChecklistDismissed: true } });
     revalidatePath("/dashboard");
   }
-  return <section className="dash-main"><header><div><small>{data.restaurant.name}</small><h1>{t("greeting", { name: session.user.name?.split(" ")[0] || data.restaurant.name })}</h1><p>{t("summary")}</p></div><Link className="button primary" href={`/menu/${data.restaurant.slug}`}><Eye />{common("viewMenu")}</Link></header>{!data.restaurant.settings?.setupChecklistDismissed&&<article className="setup-checklist"><header><div><h2>{setup("title")}</h2><p>{setup("progress",{done:completed,total:checklist.length})}</p></div>{completed===checklist.length&&<form action={dismissChecklist}><button>{setup("dismiss")}</button></form>}</header><div className="setup-progress"><i style={{width:`${completed/checklist.length*100}%`}}/></div><div>{checklist.map(item=><Link href={item.href} key={item.key}>{item.done?<CheckCircle2/>:<Circle/>}{setup(item.key as never)}</Link>)}</div></article>}<div className="stats">{stats.map(stat => <article key={stat.label}><stat.icon /><p>{stat.label}</p><strong>{stat.value}</strong></article>)}</div><div className="dash-grid"><article className="dash-card recent"><h2>{t("recentOrders")}</h2>{data.recentOrders.length ? <table><tbody>{data.recentOrders.map(order => <tr key={order.id}><td data-label={t("order")}>{order.orderNumber}</td><td data-label={t("customer")}>{order.customerName}</td><td data-label={t("products")}>{order._count.items}</td><td data-label={t("revenue")}>{money(Number(order.total))}</td></tr>)}</tbody></table> : <div className="friendly-empty compact"><ShoppingBag/><h3>{empty("ordersTitle")}</h3><p>{empty("ordersHelp")}</p></div>}</article>
+  return <section className="dash-main"><header><div><small>{data.restaurant.name}</small><h1>{t("greeting", { name: session.user.name?.split(" ")[0] || data.restaurant.name })}</h1><p>{t("summary")}</p></div><Link className="button primary" href={`/menu/${data.restaurant.slug}`}><Eye />{common("viewMenu")}</Link></header>{!data.restaurant.settings?.setupChecklistDismissed&&<DashboardDisclosure title={setup("title")} summary={setup("progress",{done:completed,total:checklist.length})}><article className="setup-checklist"><header>{completed===checklist.length&&<form action={dismissChecklist}><button>{setup("dismiss")}</button></form>}</header><div className="setup-progress"><i style={{width:`${completed/checklist.length*100}%`}}/></div><div>{checklist.map(item=><Link href={item.href} key={item.key}>{item.done?<CheckCircle2/>:<Circle/>}{setup(item.key as never)}</Link>)}</div></article></DashboardDisclosure>}<DashboardDisclosure title={t("summary")} summary={`${stats.length}`}><div className="stats">{stats.map(stat => <article key={stat.label}><stat.icon /><p>{stat.label}</p><strong>{stat.value}</strong></article>)}</div></DashboardDisclosure><div className="dash-grid"><DashboardDisclosure title={t("recentOrders")} summary={data.recentOrders.length}>{data.recentOrders.length ? <div className="record-list">{data.recentOrders.map(order => <RecordDisclosure key={order.id} title={`#${order.orderNumber}`} meta={money(Number(order.total))}><p><b>{t("customer")}</b><span>{order.customerName}</span></p><p><b>{t("products")}</b><span>{order._count.items}</span></p><p><b>{t("revenue")}</b><span>{money(Number(order.total))}</span></p></RecordDisclosure>)}</div> : <div className="friendly-empty compact"><ShoppingBag/><h3>{empty("ordersTitle")}</h3><p>{empty("ordersHelp")}</p></div>}</DashboardDisclosure>
   
-<article className="dash-card">
-  <h2>{t("topProducts")}</h2>
+<DashboardDisclosure title={t("topProducts")} summary={data.topProducts.length}>
   <div className="rank-list">
     {data.topProducts.length ? (
       data.topProducts.map((product, index) => {
@@ -58,7 +58,7 @@ export default async function Dashboard() {
       <p>{common("noData")}</p>
     )}
   </div>
-</article>
+</DashboardDisclosure>
   
-  <article className="dash-card"><h2>{t("recentCustomers")}</h2><div className="rank-list">{data.recentCustomers.length ? data.recentCustomers.map(customer => <div key={customer.customerPhone}><span>{customer.customerName}<small>{customer.customerPhone}</small></span></div>) : <p>{common("noData")}</p>}</div></article></div></section>;
+  <DashboardDisclosure title={t("recentCustomers")} summary={data.recentCustomers.length}><div className="record-list">{data.recentCustomers.length ? data.recentCustomers.map(customer => <RecordDisclosure key={customer.customerPhone} title={customer.customerName} meta={customer.customerPhone}><p><b>{t("customer")}</b><span>{customer.customerName}</span></p><p><b>{t("products")}</b><span>{customer.customerPhone}</span></p></RecordDisclosure>) : <p>{common("noData")}</p>}</div></DashboardDisclosure></div></section>;
 }

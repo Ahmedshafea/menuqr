@@ -15,6 +15,7 @@ import { DeleteProductButton } from "@/components/delete-product-button";
 import { ProductOptionsEditor } from "@/components/product-options-editor";
 import { parseProductOptions, syncProductOptions } from "@/lib/product-options";
 import { FormWizard } from "@/components/form-wizard";
+import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
 
 export const dynamic = "force-dynamic";
 
@@ -631,7 +632,7 @@ export default async function MenuManagementPage({
       {result === "created" && <p className="form-success">{t("created")}</p>}
       {result === "updated" && <p className="form-success">{t("updated")}</p>}
       {result === "invalid" && <p className="form-error">{t("invalid")}</p>}
-      <article className="dash-card management-card">
+      <DashboardDisclosure title={t("products")} summary={totalProducts} className="management-card">
         <div className="management-toolbar">
           <form className="dashboard-search">
             <input name="q" defaultValue={q} placeholder={t("search")} />
@@ -642,6 +643,20 @@ export default async function MenuManagementPage({
           </Link>
         </div>
         {products.length ? (
+          <>
+          <div className="mobile-record-list">
+            {products.map((product) => (
+              <RecordDisclosure key={product.id} title={locale === "ar" && product.nameAr ? product.nameAr : product.name} meta={money(Number(product.price))}>
+                <p><b>{t("category")}</b><span>{locale === "ar" && product.category.nameAr ? product.category.nameAr : product.category.name}</span></p>
+                <p><b>{t("stock")}</b><span>{product.stock ?? "—"}</span></p>
+                <p><b>{t("availability")}</b><span>{productText(product.availability === "AVAILABLE" ? "available" : product.availability === "HIDDEN" ? "hidden" : "temporary")}</span></p>
+                <div className="row-actions">
+                  <details className="product-create edit-product"><summary className="button ghost">{t("edit")}</summary><div className="product-form-panel"><CloseDetailsButton/><h2>{t("editProduct")}</h2><form action={updateProduct} className="settings-grid"><input type="hidden" name="id" value={product.id}/>{fields(product)}</form></div></details>
+                  <DeleteProductButton id={product.id} action={deleteProduct} label={t("delete")} confirmation={t("deleteConfirmation")}/>
+                </div>
+              </RecordDisclosure>
+            ))}
+          </div>
           <table className="w-full">
             <thead className="hidden md:table-header-group">
               <tr>
@@ -731,7 +746,7 @@ export default async function MenuManagementPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></>
         ) : (
           <div className="friendly-empty">
             <Plus />
@@ -754,7 +769,7 @@ export default async function MenuManagementPage({
             </Link>
           )}
         </div>
-      </article>
+      </DashboardDisclosure>
     </section>
   );
 }
