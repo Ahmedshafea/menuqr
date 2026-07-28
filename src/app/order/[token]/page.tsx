@@ -18,6 +18,7 @@ import {
 } from "@/components/order-workspace-actions";
 import { OrderLocationActions } from "@/components/order-location-actions";
 import { AccordionSection } from "@/components/accordion-section";
+import { sendOrderStatusNotification } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -455,6 +456,17 @@ export default async function OrderTrackingPage({
           where: { id: order.driverId },
           data: { status: "AVAILABLE" },
         });
+    });
+    await sendOrderStatusNotification({
+      orderId: order.id,
+      status: next as (typeof allowed)[number],
+      orderNumber: order.orderNumber,
+      customerPhone: order.customerPhone,
+      restaurantName:
+        order.restaurant.locale === "ar" && order.restaurant.nameAr
+          ? order.restaurant.nameAr
+          : order.restaurant.name,
+      language: order.restaurant.locale === "ar" ? "ar" : "en",
     });
     revalidatePath(`/order/${token}`);
   }

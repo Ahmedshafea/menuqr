@@ -5,6 +5,14 @@ import { getTranslations } from "next-intl/server";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { normalizeE164 } from "@/lib/whatsapp";
+import { verifyOtpVerificationProof } from "@/lib/otp";
+import { z } from "zod";
+
+const verifiedRegistrationSchema = registerSchema.extend({
+  otpVerificationToken: z.string().min(20),
+});
+
 export async function POST(request: Request) {
   const ip = requestIp(request);
   const limited = rateLimit(`register:${ip}`, 5, 60 * 60 * 1000);
@@ -15,7 +23,7 @@ export async function POST(request: Request) {
   > | null;
   if (!(await verifyTurnstile(request, body?.turnstileToken)))
     return apiError("TURNSTILE_FAILED", 400);
-  const parsed = registerSchema.safeParse(body);
+  const parsed = verifiedRegistrationSchema.safeParse(body);
   if (!parsed.success) {
     const details = parsed.error.flatten();
     const t = await getTranslations("validation");
@@ -45,14 +53,30 @@ export async function POST(request: Request) {
     });
   }
   const data = parsed.data;
+  const phone = normalizeE164(data.whatsapp);
+  if (!verifyOtpVerificationProof(data.otpVerificationToken, phone))
+    return apiError("PHONE_NOT_VERIFIED", 403);
   try {
     const existing = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true, passwordHash: true } });
     if (existing && !(await compare(data.password, existing.passwordHash)))
       return apiError("ACCOUNT_EXISTS", 409);
     const user = await prisma.$transaction(async (tx) => {
+      const verifiedOtp = await tx.whatsAppOtp.deleteMany({
+        where: {
+          phone,
+          verifiedAt: { not: null },
+          expiresAt: { gt: new Date() },
+        },
+      });
+      if (verifiedOtp.count !== 1) throw new Error("PHONE_NOT_VERIFIED");
       const user = existing
         ? await tx.user.update({ where: { id: existing.id }, data: { roles: { connectOrCreate: { where: { userId_role: { userId: existing.id, role: "RESTAURANT_OWNER" } }, create: { role: "RESTAURANT_OWNER" } } } } })
-        : await tx.user.create({ data: { name: data.name, email: data.email, passwordHash: await hash(data.password, 12), roles: { create: { role: "RESTAURANT_OWNER" } } } });
+        : await tx.user.create({ data: { name: data.name, email: data.email, phone, phoneVerifiedAt: new Date(), passwordHash: await hash(data.password, 12), roles: { create: { role: "RESTAURANT_OWNER" } } } });
+      if (existing)
+        await tx.user.update({
+          where: { id: existing.id },
+          data: { phone, phoneVerifiedAt: new Date() },
+        });
       await tx.restaurant.create({
         data: {
           name: data.restaurantName,
@@ -66,9 +90,18 @@ export async function POST(request: Request) {
       });
       return user;
     });
+    console.info(JSON.stringify({
+      level: "info",
+      context: "registration",
+      event: "account_created_after_phone_verification",
+      userId: user.id,
+      timestamp: new Date().toISOString(),
+    }));
     return Response.json({ id: user.id }, { status: 201 });
   } catch (error) {
     logApiError("register", error, { ip });
+    if (error instanceof Error && error.message === "PHONE_NOT_VERIFIED")
+      return apiError("PHONE_NOT_VERIFIED", 403);
     return apiError("ACCOUNT_EXISTS", 409);
   }
 }

@@ -14,6 +14,15 @@ export async function requireManagedOrder(accessToken: string) {
       accessToken: true,
       status: true,
       driverId: true,
+      customerPhone: true,
+      orderNumber: true,
+      restaurant: {
+        select: {
+          name: true,
+          nameAr: true,
+          locale: true,
+        },
+      },
     },
   });
   if (!order) throw new Error("ORDER_NOT_FOUND");

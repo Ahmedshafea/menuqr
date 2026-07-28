@@ -19,12 +19,23 @@ export async function POST(request: Request) {
     const phoneLimit = rateLimit(`whatsapp-otp-phone:${hashOtp(phone, "rate-limit")}`, 3, 15 * 60_000);
     if (!phoneLimit.allowed) return rateLimitError(phoneLimit.retryAfter);
     const code = generateOtp();
-    await sendOTP(phone, code, parsed.data.language);
     await prisma.whatsAppOtp.upsert({
       where: { phone },
       create: { phone, codeHash: hashOtp(phone, code), expiresAt: otpExpiry() },
       update: { codeHash: hashOtp(phone, code), expiresAt: otpExpiry(), verifiedAt: null, attempts: 0 },
     });
+    try {
+      await sendOTP(phone, code, parsed.data.language);
+    } catch (error) {
+      await prisma.whatsAppOtp.deleteMany({ where: { phone } });
+      throw error;
+    }
+    console.info(JSON.stringify({
+      level: "info",
+      context: "whatsapp-otp",
+      event: "otp_sent",
+      timestamp: new Date().toISOString(),
+    }));
     return Response.json({ sent: true });
   } catch (error) {
     logApiError("whatsapp-send-otp", error);
@@ -32,4 +43,3 @@ export async function POST(request: Request) {
     return apiError(error instanceof Error ? error.message : "OTP_SEND_FAILED", 500);
   }
 }
-

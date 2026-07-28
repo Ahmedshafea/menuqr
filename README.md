@@ -120,19 +120,30 @@ template status events.
 ### Environment variables
 
 ```env
-WHATSAPP_TOKEN=
+WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_WABA_ID=
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_API_VERSION=v23.0
-WHATSAPP_OTP_TEMPLATE=menuqr_otp
+WHATSAPP_TEMPLATE_OTP=otp_verification
+WHATSAPP_TEMPLATE_ORDER_RECEIVED=order_received
+WHATSAPP_TEMPLATE_ORDER_ACCEPTED=order_accepted
+WHATSAPP_TEMPLATE_ORDER_PREPARING=order_preparing
+WHATSAPP_TEMPLATE_ORDER_READY=order_ready
+WHATSAPP_TEMPLATE_ORDER_OUT_FOR_DELIVERY=order_out_for_delivery
+WHATSAPP_TEMPLATE_ORDER_DELIVERED=order_delivered
+WHATSAPP_TEMPLATE_ORDER_CANCELLED=order_cancelled
+WHATSAPP_TEMPLATE_NEW_ORDER=new_restaurant_order
+WHATSAPP_TEMPLATE_PAYMENT_SUCCESSFUL=payment_successful
+WHATSAPP_TEMPLATE_PAYMENT_FAILED=payment_failed
 OTP_HASH_SECRET=
 OTP_EXPIRE_MINUTES=5
 OTP_LENGTH=6
 ```
 
-`WHATSAPP_TOKEN` should be a permanent System User token in production.
+`WHATSAPP_ACCESS_TOKEN` should be a permanent System User token in production.
+`WHATSAPP_TOKEN` remains accepted as a backwards-compatible alias.
 `WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
 to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
 characters and can fall back to `AUTH_SECRET`.
@@ -143,7 +154,7 @@ characters and can fall back to `AUTH_SECRET`.
    the Phone Number ID and WABA ID.
 2. Create the approved templates listed in `src/lib/whatsapp.ts`. Template body
    variables must use the same order passed by the application. Create the
-   authentication template named by `WHATSAPP_OTP_TEMPLATE` with a copy-code or
+   authentication template named by `WHATSAPP_TEMPLATE_OTP` with a copy-code or
    one-tap URL button.
 3. Configure the callback URL as:
    `https://YOUR_DOMAIN/api/webhooks/whatsapp`.

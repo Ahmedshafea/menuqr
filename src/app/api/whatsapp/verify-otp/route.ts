@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { apiError, rateLimitError } from "@/lib/api";
-import { consumeOtp, OTP_LENGTH } from "@/lib/otp";
+import { apiError, logApiError, rateLimitError } from "@/lib/api";
+import { consumeOtp, createOtpVerificationProof, OTP_LENGTH } from "@/lib/otp";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
 import { normalizeE164, WhatsAppError } from "@/lib/whatsapp";
 
@@ -23,8 +23,19 @@ export async function POST(request: Request) {
     if (result !== "verified") return apiError("INVALID_OTP", 400);
     const session = await auth();
     if (session?.user.id) await prisma.user.update({ where: { id: session.user.id }, data: { phone, phoneVerifiedAt: new Date() } });
-    return Response.json({ verified: true });
+    console.info(JSON.stringify({
+      level: "info",
+      context: "whatsapp-otp",
+      event: "otp_verified",
+      authenticatedUser: Boolean(session?.user.id),
+      timestamp: new Date().toISOString(),
+    }));
+    return Response.json({
+      verified: true,
+      verificationToken: createOtpVerificationProof(phone),
+    });
   } catch (error) {
+    logApiError("whatsapp-verify-otp", error);
     if (error instanceof WhatsAppError) return apiError(error.code, error.status);
     return apiError("OTP_VERIFY_FAILED", 500);
   }
