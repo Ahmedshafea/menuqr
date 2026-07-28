@@ -151,6 +151,65 @@ export function sendRestaurantNotification(type: RestaurantNotificationType, to:
   return sendTemplate({ to, templateName: RESTAURANT_TEMPLATES[type], variables, language, notificationType: type });
 }
 
+interface SendOrderCreatedNotificationsInput {
+  orderId: string;
+  orderNumber: string;
+  restaurantName: string;
+  restaurantPhone: string;
+  customerName: string;
+  customerPhone: string;
+  total: number;
+  trackingUrl: string;
+  language?: string;
+}
+
+/**
+ * Sends both sides of the new-order conversation through the existing
+ * approved-template service. Notification failures are deliberately contained
+ * here so a Meta outage can never roll back or fail an accepted order.
+ */
+export async function sendOrderCreatedNotifications(
+  input: SendOrderCreatedNotificationsInput,
+) {
+  if (!isWhatsAppConfigured()) {
+    log("error", "order_notifications_skipped", {
+      reason: "not_configured",
+      orderId: input.orderId,
+    });
+    return;
+  }
+
+  const language = input.language || "ar";
+  const notifications = await Promise.allSettled([
+    sendCustomerNotification(
+      "order_received",
+      input.customerPhone,
+      [input.orderNumber, input.restaurantName, input.trackingUrl],
+      language,
+    ),
+    sendRestaurantNotification(
+      "new_order",
+      input.restaurantPhone,
+      [input.orderNumber, input.customerName, input.total, input.trackingUrl],
+      language,
+    ),
+  ]);
+
+  notifications.forEach((result, index) => {
+    if (result.status === "rejected") {
+      const error = result.reason;
+      log("error", "order_notification_failed", {
+        audience: index === 0 ? "customer" : "restaurant",
+        orderId: input.orderId,
+        code:
+          error instanceof WhatsAppError
+            ? error.code
+            : "WHATSAPP_SEND_FAILED",
+      });
+    }
+  });
+}
+
 export async function listTemplates() {
   const { wabaId } = config();
   return graphRequest<{ data?: unknown[] }>(`${wabaId}/message_templates?fields=id,name,status,language,category&limit=100`, { method: "GET" }, false);
