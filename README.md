@@ -146,7 +146,8 @@ characters and can fall back to `AUTH_SECRET`.
    authentication template named by `WHATSAPP_OTP_TEMPLATE` with a copy-code or
    one-tap URL button.
 3. Configure the callback URL as:
-   `https://YOUR_DOMAIN/api/whatsapp/webhook`.
+   `https://YOUR_DOMAIN/api/webhooks/whatsapp`.
+   The legacy `/api/whatsapp/webhook` route remains available as an alias.
 4. Use the exact `WHATSAPP_VERIFY_TOKEN` as the webhook verify token and
    subscribe to `messages` and `message_template_status_update`.
 5. Add the environment values to Vercel for Production and Preview, then deploy.
