@@ -11,6 +11,14 @@ function safeEqual(left: string, right: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+function cleanEnvironmentValue(value: string | undefined) {
+  const trimmed = value?.trim() ?? "";
+  const quoted =
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"));
+  return quoted ? trimmed.slice(1, -1).trim() : trimmed;
+}
+
 function validSignature(raw: string, signature: string | null) {
   const secret = process.env.WHATSAPP_APP_SECRET;
   if (!secret || !signature?.startsWith("sha256=")) return false;
@@ -24,13 +32,32 @@ function eventLog(event: string, metadata: Record<string, unknown> = {}) {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const mode = url.searchParams.get("hub.mode");
-  const token = url.searchParams.get("hub.verify_token") || "";
+  const mode = url.searchParams.get("hub.mode")?.trim();
+  const token = url.searchParams.get("hub.verify_token")?.trim() || "";
   const challenge = url.searchParams.get("hub.challenge");
-  const configured = process.env.WHATSAPP_VERIFY_TOKEN;
-  if (mode === "subscribe" && challenge && configured && safeEqual(token, configured))
+  const configured = cleanEnvironmentValue(process.env.WHATSAPP_VERIFY_TOKEN);
+  if (!configured) {
+    console.error(JSON.stringify({
+      level: "error",
+      context: "whatsapp-webhook",
+      event: "verify_token_not_configured",
+      timestamp: new Date().toISOString(),
+    }));
+    return new Response("Webhook verify token is not configured", { status: 503 });
+  }
+  if (mode === "subscribe" && challenge && safeEqual(token, configured))
     return new Response(challenge, { status: 200, headers: { "content-type": "text/plain" } });
-  return new Response("Forbidden", { status: 403 });
+  console.warn(JSON.stringify({
+    level: "warn",
+    context: "whatsapp-webhook",
+    event: "verification_rejected",
+    modeValid: mode === "subscribe",
+    challengePresent: Boolean(challenge),
+    tokenPresent: Boolean(token),
+    tokenLengthMatches: token.length === configured.length,
+    timestamp: new Date().toISOString(),
+  }));
+  return new Response("Webhook verify token does not match", { status: 403 });
 }
 
 export async function POST(request: Request) {

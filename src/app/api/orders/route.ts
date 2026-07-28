@@ -11,7 +11,7 @@ import { hash } from "bcryptjs";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { isDemoSlug } from "@/lib/demo-restaurants";
 import { calculateOrderPricing } from "@/lib/order-pricing";
-import { isWhatsAppConfigured, sendCustomerNotification, sendRestaurantNotification } from "@/lib/whatsapp";
+import { sendOrderCreatedNotifications } from "@/lib/whatsapp";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -281,16 +281,22 @@ export async function POST(request: Request) {
   const message = arabic
     ? `طلب جديد #${number} من ${data.customerName} إلى ${restaurantName}\n\nعرض الطلب والتواصل مع العميل:\n${trackingUrl}`
     : `New order #${number} from ${data.customerName} for ${restaurantName}\n\nView the order and contact the customer:\n${trackingUrl}`;
-  if (isWhatsAppConfigured()) {
-    const language = arabic ? "ar" : "en";
-    const results = await Promise.allSettled([
-      sendCustomerNotification("order_received", data.customerPhone, [number, restaurantName, trackingUrl], language),
-      sendRestaurantNotification("new_order", restaurant.whatsapp, [number, data.customerName, pricing.total, trackingUrl], language),
-    ]);
-    results.forEach((result, index) => {
-      if (result.status === "rejected")
-        logApiError("whatsapp-order-notification", result.reason, { audience: index === 0 ? "customer" : "restaurant", orderId: order.id });
+  try {
+    await sendOrderCreatedNotifications({
+      orderId: order.id,
+      orderNumber: number,
+      restaurantName,
+      restaurantPhone: restaurant.whatsapp,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      total: pricing.total,
+      trackingUrl,
+      language: arabic ? "ar" : "en",
     });
+  } catch (error) {
+    // Defensive boundary: order creation must succeed even if an unexpected
+    // notification integration error escapes the reusable service.
+    logApiError("whatsapp-order-notifications", error, { orderId: order.id });
   }
   return Response.json(
     {
