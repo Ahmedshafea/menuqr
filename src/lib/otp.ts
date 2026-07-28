@@ -35,6 +35,41 @@ export function otpExpiry() {
   return new Date(Date.now() + OTP_EXPIRE_MINUTES * 60_000);
 }
 
+export function createOtpVerificationProof(phone: string) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      phone,
+      expiresAt: Date.now() + OTP_EXPIRE_MINUTES * 60_000,
+    }),
+  ).toString("base64url");
+  const signature = createHmac("sha256", secret()).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function verifyOtpVerificationProof(proof: string, phone: string) {
+  const [payload, signature, extra] = proof.split(".");
+  if (!payload || !signature || extra) return false;
+  const expected = createHmac("sha256", secret()).update(payload).digest();
+  const received = Buffer.from(signature, "base64url");
+  if (
+    expected.length !== received.length ||
+    !timingSafeEqual(expected, received)
+  )
+    return false;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as { phone?: unknown; expiresAt?: unknown };
+    return (
+      parsed.phone === phone &&
+      typeof parsed.expiresAt === "number" &&
+      parsed.expiresAt > Date.now()
+    );
+  } catch {
+    return false;
+  }
+}
+
 export type OtpVerificationResult = "verified" | "invalid" | "expired" | "attempts_exceeded";
 
 export async function consumeOtp(phone: string, code: string): Promise<OtpVerificationResult> {
