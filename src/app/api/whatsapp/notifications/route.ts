@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 const customerTypes = new Set<CustomerNotificationType>([
   "order_received", "order_accepted", "order_preparing", "order_ready", "order_out_for_delivery",
   "order_delivered", "order_cancelled", "payment_successful", "payment_failed",
+  "review_request",
 ]);
 const schema = z.object({
   type: z.enum(WHATSAPP_NOTIFICATION_TYPES),
@@ -40,4 +41,3 @@ export async function POST(request: Request) {
     return apiError("WHATSAPP_SEND_FAILED", 500);
   }
 }
-

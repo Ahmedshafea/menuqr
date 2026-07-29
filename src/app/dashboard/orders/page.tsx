@@ -6,8 +6,8 @@ import { requireTenant } from "@/lib/tenant";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
-import { sendOrderStatusNotification } from "@/lib/whatsapp";
-import { publicOrderUrl } from "@/lib/utils";
+import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
+import { applicationUrl, publicOrderUrl } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 const statuses = [
   "NEW",
@@ -60,7 +60,7 @@ export default async function OrdersPage({
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
-      select: { currency: true, locale: true, name: true, nameAr: true },
+      select: { currency: true, locale: true, name: true, nameAr: true, slug: true },
     }),
     prisma.order.findMany({
       where,
@@ -136,6 +136,18 @@ export default async function OrdersPage({
             ? restaurant.nameAr
             : restaurant.name,
         customerOrderUrl: publicOrderUrl(order.accessToken),
+        language: restaurant.locale === "ar" ? "ar" : "en",
+      });
+    if (changed && next === "COMPLETED")
+      await sendReviewRequest({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customerPhone: order.customerPhone,
+        restaurantName:
+          restaurant.locale === "ar" && restaurant.nameAr
+            ? restaurant.nameAr
+            : restaurant.name,
+        reviewUrl: `${applicationUrl()}/r/${restaurant.slug}/review?order=${order.accessToken}`,
         language: restaurant.locale === "ar" ? "ar" : "en",
       });
     revalidatePath("/dashboard/orders");

@@ -21,6 +21,7 @@ export async function requireManagedOrder(accessToken: string) {
           name: true,
           nameAr: true,
           locale: true,
+          slug: true,
         },
       },
     },

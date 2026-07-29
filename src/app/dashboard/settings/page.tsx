@@ -144,6 +144,11 @@ export default async function SettingsPage() {
           taxType: adjustmentType("taxType"),
           discountValue: adjustmentValue("discountValue", "discountType"),
           discountType: adjustmentType("discountType"),
+          reviewsEnabled: form.get("reviewsEnabled") === "on",
+          reviewImagesEnabled: form.get("reviewImagesEnabled") === "on",
+          anonymousReviewsEnabled: form.get("anonymousReviewsEnabled") === "on",
+          requireCompletedOrderForReview: form.get("requireCompletedOrderForReview") === "on",
+          autoPublishReviews: form.get("autoPublishReviews") === "on",
         },
         update: {
           allowOrdering: form.get("allowOrdering") === "on",
@@ -163,6 +168,11 @@ export default async function SettingsPage() {
           taxType: adjustmentType("taxType"),
           discountValue: adjustmentValue("discountValue", "discountType"),
           discountType: adjustmentType("discountType"),
+          reviewsEnabled: form.get("reviewsEnabled") === "on",
+          reviewImagesEnabled: form.get("reviewImagesEnabled") === "on",
+          anonymousReviewsEnabled: form.get("anonymousReviewsEnabled") === "on",
+          requireCompletedOrderForReview: form.get("requireCompletedOrderForReview") === "on",
+          autoPublishReviews: form.get("autoPublishReviews") === "on",
         },
       });
     });
@@ -431,6 +441,23 @@ export default async function SettingsPage() {
         </AccordionSection>
         <AccordionSection title={notifications("title")} className="settings-section">
           <NotificationPreferences labels={{browser:notifications("browser"),sound:notifications("sound"),help:notifications("preferencesHelp")}} />
+        </AccordionSection>
+        <AccordionSection title={restaurant.locale === "ar" ? "إعدادات التقييمات" : "Review settings"} className="settings-section">
+          <div className="settings-check-grid">
+            {[
+              ["reviewsEnabled", restaurant.locale === "ar" ? "تفعيل التقييمات" : "Enable reviews", restaurant.settings?.reviewsEnabled ?? true],
+              ["reviewImagesEnabled", restaurant.locale === "ar" ? "السماح بالصور" : "Allow images", restaurant.settings?.reviewImagesEnabled ?? true],
+              ["anonymousReviewsEnabled", restaurant.locale === "ar" ? "السماح بالتقييم المجهول" : "Allow anonymous reviews", restaurant.settings?.anonymousReviewsEnabled ?? true],
+              ["requireCompletedOrderForReview", restaurant.locale === "ar" ? "اشتراط طلب مكتمل" : "Require completed order", restaurant.settings?.requireCompletedOrderForReview ?? false],
+              ["autoPublishReviews", restaurant.locale === "ar" ? "النشر التلقائي" : "Auto publish", restaurant.settings?.autoPublishReviews ?? false],
+            ].map(([name,label,checked])=><label className="check-label" key={String(name)}><input type="checkbox" name={String(name)} defaultChecked={Boolean(checked)}/>{String(label)}</label>)}
+          </div>
+          <RestaurantQr
+            menuUrl={`${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/r/${restaurant.slug}/review`}
+            slug={`${restaurant.slug}-review`}
+            label={restaurant.locale === "ar" ? "امسح الرمز لإضافة تقييم" : "Scan to leave a review"}
+            controls={{png:qr("downloadPng"),svg:qr("downloadSvg"),copy:qr("copyLink"),copied:qr("copied"),printA4:mvp("printA4"),printCards:mvp("printCards")}}
+          />
         </AccordionSection>
         <AccordionSection id="restaurant-qr" title={qr("sectionTitle")} className="settings-section qr-settings-section">
           <p>{qr("sectionHelp")}</p>
