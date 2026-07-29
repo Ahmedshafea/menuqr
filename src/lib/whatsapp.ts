@@ -37,7 +37,9 @@ const CUSTOMER_TEMPLATES: Record<CustomerNotificationType, string> = {
 };
 
 const RESTAURANT_TEMPLATES: Record<RestaurantNotificationType, string> = {
-  new_order: environmentValue("WHATSAPP_TEMPLATE_NEW_ORDER") || "new_restaurant_order",
+  new_order:
+    environmentValue("WHATSAPP_TEMPLATE_NEW_ORDER") ||
+    "new_restaurant_order_received",
   order_cancelled: environmentValue("WHATSAPP_TEMPLATE_RESTAURANT_ORDER_CANCELLED") || "restaurant_order_cancelled",
   customer_paid: environmentValue("WHATSAPP_TEMPLATE_CUSTOMER_PAID") || "customer_paid",
   subscription_expiring: environmentValue("WHATSAPP_TEMPLATE_SUBSCRIPTION_EXPIRING") || "subscription_expiring",
@@ -244,6 +246,19 @@ function bodyComponent(variables: TemplateVariable[]): WhatsAppTemplateComponent
   return variables.length ? [{ type: "body", parameters: variables.map((value) => ({ type: "text", text: String(value).slice(0, 1024) })) }] : [];
 }
 
+function lastUrlSegment(url: string) {
+  try {
+    const segments = new URL(url).pathname.split("/").filter(Boolean);
+    const value = segments.at(-1);
+    if (value) return value;
+  } catch {
+    // Fall through to the safe path-only parser for relative URLs.
+  }
+  const value = url.split("?")[0].split("#")[0].split("/").filter(Boolean).at(-1);
+  if (!value) throw new WhatsAppError("INVALID_ORDER_URL", 400);
+  return value;
+}
+
 export async function sendTemplate(input: SendTemplateInput) {
   const { phoneNumberId } = config();
   const to = normalizeE164(input.to).slice(1);
@@ -341,30 +356,63 @@ export async function sendOrderCreatedNotifications(
 
   const language = input.language || "ar";
   const notifications = await Promise.allSettled([
-    sendCustomerNotification(
-      "order_received",
-      input.customerPhone,
-      [
-        input.customerName,
-        input.orderNumber,
-        input.total,
-        input.customerOrderUrl,
-      ],
+    sendTemplate({
+      to: input.customerPhone,
+      templateName: CUSTOMER_TEMPLATES.order_received,
       language,
-    ),
-    sendRestaurantNotification(
-      "new_order",
-      input.restaurantPhone,
-      [
-        input.orderNumber,
-        input.customerName,
-        input.total,
-        input.orderType,
-        input.orderTime,
-        input.restaurantOrderUrl,
+      notificationType: "order_received",
+      components: [
+        {
+          type: "body",
+          parameters: [
+            input.customerName,
+            input.orderNumber,
+            input.restaurantName,
+            input.restaurantPhone,
+            input.total,
+          ].map((value) => ({
+            type: "text" as const,
+            text: String(value).slice(0, 1024),
+          })),
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [
+            { type: "text", text: lastUrlSegment(input.customerOrderUrl) },
+          ],
+        },
       ],
+    }),
+    sendTemplate({
+      to: input.restaurantPhone,
+      templateName: RESTAURANT_TEMPLATES.new_order,
       language,
-    ),
+      notificationType: "new_order",
+      components: [
+        {
+          type: "body",
+          parameters: [
+            input.orderNumber,
+            input.customerName,
+            input.customerPhone,
+            input.total,
+            input.orderType,
+            input.orderTime,
+          ].map((value) => ({
+            type: "text" as const,
+            text: String(value).slice(0, 1024),
+          })),
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [{ type: "text", text: input.orderId }],
+        },
+      ],
+    }),
   ]);
 
   notifications.forEach((result, index) => {

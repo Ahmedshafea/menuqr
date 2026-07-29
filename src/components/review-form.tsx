@@ -1,33 +1,41 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 const fields = [
-  ["overall", "Overall experience", "التجربة العامة"],
-  ["foodQuality", "Food quality", "جودة الطعام"],
-  ["deliverySpeed", "Delivery speed", "سرعة التوصيل"],
-  ["packaging", "Packaging", "التغليف"],
-  ["staffBehavior", "Staff behavior", "تعامل الموظفين"],
+  "overall",
+  "foodQuality",
+  "deliverySpeed",
+  "packaging",
+  "staffBehavior",
 ] as const;
 
 export function ReviewForm({
   action,
-  arabic,
   allowImages,
 }: {
   action: (formData: FormData) => void | Promise<void>;
-  arabic: boolean;
   allowImages: boolean;
 }) {
-  const [scores, setScores] = useState<Record<string, number>>(
-    Object.fromEntries(fields.map(([name]) => [name, 5])),
+  const t = useTranslations("reviews.form");
+  const [scores, setScores] = useState<Record<(typeof fields)[number], number>>(
+    Object.fromEntries(fields.map((name) => [name, 5])) as Record<
+      (typeof fields)[number],
+      number
+    >,
   );
+
   return (
     <form action={action} className="public-review-form">
-      {fields.map(([name, en, ar]) => (
+      {fields.map((name) => (
         <fieldset key={name}>
-          <legend>{arabic ? ar : en}</legend>
-          <div className="star-input">
+          <legend>{t(name)}</legend>
+          <div
+            className="star-input"
+            role="radiogroup"
+            aria-label={t(name)}
+          >
             {[1, 2, 3, 4, 5].map((score) => (
               <label key={score}>
                 <input
@@ -38,6 +46,10 @@ export function ReviewForm({
                   onChange={() =>
                     setScores((current) => ({ ...current, [name]: score }))
                   }
+                  aria-label={t("scoreLabel", {
+                    field: t(name),
+                    score,
+                  })}
                   required
                 />
                 <span aria-hidden="true">★</span>
@@ -47,16 +59,16 @@ export function ReviewForm({
         </fieldset>
       ))}
       <label>
-        {arabic ? "الاسم (اختياري)" : "Name (optional)"}
-        <input name="customerName" maxLength={80} />
+        {t("name")}
+        <input name="customerName" maxLength={80} autoComplete="name" />
       </label>
       <label>
-        {arabic ? "تعليقك (اختياري)" : "Your comment (optional)"}
+        {t("comment")}
         <textarea name="comment" maxLength={1000} rows={5} />
       </label>
       {allowImages && (
         <label>
-          {arabic ? "صور التجربة (حتى 3 صور)" : "Experience images (up to 3)"}
+          {t("images")}
           <input
             name="images"
             type="file"
@@ -65,8 +77,8 @@ export function ReviewForm({
           />
         </label>
       )}
-      <button className="button primary large">
-        {arabic ? "إرسال التقييم" : "Submit review"}
+      <button className="button primary large" type="submit">
+        {t("submit")}
       </button>
     </form>
   );
