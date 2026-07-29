@@ -8,7 +8,7 @@ import { z } from "zod";
 import { Copy, Gift, MessageCircle, Minus, Phone, Plus, RefreshCw, Store, Trash2, UserRound } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { publicOrderUrl, whatsappUrl } from "@/lib/utils";
+import { applicationUrl, publicOrderUrl, whatsappUrl } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { recalculateOrder, requireManagedOrder } from "@/lib/order-management";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
@@ -18,7 +18,7 @@ import {
 } from "@/components/order-workspace-actions";
 import { OrderLocationActions } from "@/components/order-location-actions";
 import { AccordionSection } from "@/components/accordion-section";
-import { sendOrderStatusNotification } from "@/lib/whatsapp";
+import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -476,6 +476,18 @@ export default async function OrderTrackingPage({
         customerOrderUrl: publicOrderUrl(order.accessToken),
         language: order.restaurant.locale === "ar" ? "ar" : "en",
       });
+    if (changed && next === "COMPLETED")
+      await sendReviewRequest({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customerPhone: order.customerPhone,
+        restaurantName:
+          order.restaurant.locale === "ar" && order.restaurant.nameAr
+            ? order.restaurant.nameAr
+            : order.restaurant.name,
+        reviewUrl: `${applicationUrl()}/r/${order.restaurant.slug}/review?order=${order.accessToken}`,
+        language: order.restaurant.locale === "ar" ? "ar" : "en",
+      });
     revalidatePath(`/order/${token}`);
   }
 
@@ -640,6 +652,20 @@ export default async function OrderTrackingPage({
                 notes: t("notes"),
               }}
             />
+            {order.status === "COMPLETED" && (
+              <a
+                className="button whatsapp-button"
+                target="_blank"
+                rel="noreferrer"
+                href={whatsappUrl(
+                  order.customerPhone,
+                  `${locale === "ar" ? "شكراً لطلبك ❤️\nنسعد بتقييم تجربتك معنا." : "Thank you for your order ❤️\nWe would love your feedback."}\n\n${applicationUrl()}/r/${order.restaurant.slug}/review?order=${order.accessToken}`,
+                )}
+              >
+                <MessageCircle />
+                {locale === "ar" ? "إرسال طلب تقييم" : "Send review request"}
+              </a>
+            )}
           </section>
         )}
         <section className="order-layout">

@@ -460,6 +460,11 @@ model Setting {
   offersDineIn             Boolean    @default(false)
   restaurantId             String     @unique
   estimatedOrderMinutes    Int        @default(30)
+  reviewsEnabled           Boolean    @default(true)
+  reviewImagesEnabled      Boolean    @default(true)
+  anonymousReviewsEnabled  Boolean    @default(true)
+  requireCompletedOrderForReview Boolean @default(false)
+  autoPublishReviews       Boolean    @default(false)
   restaurant               Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 }
 
@@ -560,22 +565,44 @@ model DeliveryDriver {
 model RestaurantReview {
   id             String       @id @default(cuid())
   restaurantId   String
-  orderId        String       @unique
+  orderId        String?      @unique
   customerUserId String?
+  customerName   String?
   foodQuality    Int
   deliverySpeed  Int
   packaging      Int
+  staffBehavior  Int          @default(5)
   overall        Int
   comment        String?
+  ownerReply     String?
+  repliedAt      DateTime?
+  abuseReportedAt DateTime?
+  ipHash         String?
+  isVerified     Boolean      @default(false)
   status         ReviewStatus @default(PENDING)
   publishedAt    DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   restaurant     Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  images         RestaurantReviewImage[]
 
   @@index([restaurantId, status, createdAt])
   @@index([restaurantId, overall])
+  @@index([restaurantId, publishedAt])
+  @@index([restaurantId, ipHash, createdAt])
+}
+
+model RestaurantReviewImage {
+  id        String           @id @default(cuid())
+  reviewId  String
+  url       String
+  path      String
+  sortOrder Int              @default(0)
+  createdAt DateTime         @default(now())
+  review    RestaurantReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId, sortOrder])
 }
 
 model RestaurantNotification {

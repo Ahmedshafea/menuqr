@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createSupabaseAdmin } from "./server";
 import { rateLimit } from "@/lib/rate-limit";
 
-export const STORAGE_BUCKETS = ["restaurant-logos", "restaurant-covers", "product-images"] as const;
+export const STORAGE_BUCKETS = ["restaurant-logos", "restaurant-covers", "product-images", "review-images"] as const;
 export type StorageBucket = (typeof STORAGE_BUCKETS)[number];
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const extensions: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" };

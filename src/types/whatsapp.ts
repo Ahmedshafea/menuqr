@@ -3,7 +3,7 @@ export type WhatsAppLanguage = "ar" | "en" | (string & {});
 export type CustomerNotificationType =
   | "order_received" | "order_accepted" | "order_preparing" | "order_ready"
   | "order_out_for_delivery" | "order_delivered" | "order_cancelled"
-  | "payment_successful" | "payment_failed";
+  | "payment_successful" | "payment_failed" | "review_request";
 
 export type RestaurantNotificationType =
   | "new_order" | "order_cancelled" | "customer_paid" | "subscription_expiring"
@@ -58,4 +58,3 @@ export interface WhatsAppWebhookPayload {
     }>;
   }>;
 }
-

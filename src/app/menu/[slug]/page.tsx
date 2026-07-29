@@ -13,8 +13,8 @@ import { auth } from "@/auth";
 import { getDemoRestaurant } from "@/lib/demo-restaurants";
 export const revalidate = 60;
 const getDatabaseRestaurant = unstable_cache(
-  async (slug: string) =>
-    prisma.restaurant.findUnique({
+  async (slug: string) => {
+    const restaurant = await prisma.restaurant.findUnique({
       where: { slug, isActive: true },
       include: {
         settings: true,
@@ -33,9 +33,20 @@ const getDatabaseRestaurant = unstable_cache(
           },
           orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
         },
-        reviews:{where:{status:"PUBLISHED"},orderBy:{publishedAt:"desc"},take:6,select:{id:true,overall:true,comment:true,createdAt:true,order:{select:{customerName:true}}}},
+        reviews:{where:{status:"PUBLISHED"},orderBy:{publishedAt:"desc"},take:5,select:{id:true,overall:true,comment:true,customerName:true,isVerified:true,ownerReply:true,createdAt:true,order:{select:{customerName:true}}}},
       },
-    }),
+    });
+    if (!restaurant) return null;
+    const rating = await prisma.restaurantReview.aggregate({
+      where: { restaurantId: restaurant.id, status: "PUBLISHED" },
+      _avg: { overall: true },
+      _count: { _all: true },
+    });
+    return {
+      ...restaurant,
+      rating: { average: rating._avg.overall ?? 0, count: rating._count._all },
+    };
+  },
   ["public-menu"],
   { revalidate: 60, tags: ["public-menu"] },
 );
@@ -68,14 +79,13 @@ export default async function MenuPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ reorder?: string; extras?: string; checkout?: string }>;
 }) {
-  const [restaurant, t, qr, closedText, experienceText, demoText, reviewsText, locale] = await Promise.all([
+  const [restaurant, t, qr, closedText, experienceText, demoText, locale] = await Promise.all([
     getRestaurant((await params).slug),
     getTranslations("publicMenu"),
     getTranslations("qr"),
     getTranslations("launchPolish.closed"),
     getTranslations("mvpPolish.restaurant"),
     getTranslations("demo"),
-    getTranslations("restaurantWorkflow.reviews"),
     getLocale(),
   ]);
   if (!restaurant) notFound();
@@ -169,6 +179,16 @@ export default async function MenuPage({
           <div className="menu-hero-copy">
             <p>{t("welcome")}</p>
             <h1>{name}</h1>
+            {"rating" in restaurant && restaurant.rating.count > 0 && (
+              <a
+                className="restaurant-rating-badge"
+                href={`/menu/${restaurant.slug}/reviews`}
+              >
+                <b>{"★".repeat(Math.round(restaurant.rating.average))}</b>
+                <strong>{restaurant.rating.average.toFixed(1)}</strong>
+                <span>{restaurant.rating.count} {locale === "ar" ? "تقييم" : "reviews"}</span>
+              </a>
+            )}
             <span>
               {locale === "ar"
                 ? (restaurant.descriptionAr ?? restaurant.description)
@@ -247,6 +267,35 @@ export default async function MenuPage({
             </div>
           </aside>
         )}
+        {"reviews" in restaurant && restaurant.reviews.length > 0 && (
+          <section className="public-reviews wall-of-love">
+            <header>
+              <div>
+                <h2>{locale === "ar" ? "آراء عملائنا" : "Wall of Love"}</h2>
+                <p>{locale === "ar" ? "تجارب حقيقية من عملائنا" : "Real customer experiences"}</p>
+              </div>
+              <a className="button ghost" href={`/menu/${restaurant.slug}/reviews`}>
+                {locale === "ar" ? "عرض جميع التقييمات" : "View all reviews"}
+              </a>
+            </header>
+            <div>
+              {restaurant.reviews.map((review) => (
+                <article key={review.id}>
+                  <b>{"★".repeat(review.overall)}</b>
+                  <p>{review.comment || "—"}</p>
+                  <small>
+                    {review.customerName ||
+                      review.order?.customerName ||
+                      (locale === "ar" ? "عميل" : "Customer")}
+                    {review.isVerified &&
+                      ` · ${locale === "ar" ? "✓ عميل موثّق" : "✓ Verified customer"}`}
+                  </small>
+                  {review.ownerReply && <blockquote>{review.ownerReply}</blockquote>}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
         <MenuClient
           restaurant={{
             name,
@@ -265,7 +314,6 @@ export default async function MenuPage({
           customerDefaults={customerDefaults ? { name: customerDefaults.name, phone: customerDefaults.phone ?? "", address: customerDefaults.customerProfile?.addresses[0]?.address ?? "", addresses: (customerDefaults.customerProfile?.addresses ?? []).map((item) => ({ id: item.id, title: item.title, address: item.address, latitude: item.latitude == null ? null : Number(item.latitude), longitude: item.longitude == null ? null : Number(item.longitude), isDefault: item.isDefault })) } : undefined}
           demo={isDemo}
         />
-        {"reviews" in restaurant&&restaurant.reviews.length>0&&<section className="public-reviews"><header><h2>{reviewsText("latest")}</h2><strong>★ {(restaurant.reviews.reduce((sum,review)=>sum+review.overall,0)/restaurant.reviews.length).toFixed(1)} · {reviewsText("count",{count:restaurant.reviews.length})}</strong></header><div>{restaurant.reviews.map(review=><article key={review.id}><b>{"★".repeat(review.overall)}</b><p>{review.comment}</p><small>{review.order.customerName}</small></article>)}</div></section>}
       </section>
       <footer className="menu-footer">{t("powered")}</footer>
     </main>

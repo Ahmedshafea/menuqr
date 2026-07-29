@@ -33,6 +33,7 @@ const CUSTOMER_TEMPLATES: Record<CustomerNotificationType, string> = {
   order_cancelled: environmentValue("WHATSAPP_TEMPLATE_ORDER_CANCELLED") || "order_cancelled",
   payment_successful: environmentValue("WHATSAPP_TEMPLATE_PAYMENT_SUCCESSFUL") || "payment_successful",
   payment_failed: environmentValue("WHATSAPP_TEMPLATE_PAYMENT_FAILED") || "payment_failed",
+  review_request: environmentValue("WHATSAPP_TEMPLATE_REVIEW_REQUEST") || "review_request",
 };
 
 const RESTAURANT_TEMPLATES: Record<RestaurantNotificationType, string> = {
@@ -425,6 +426,30 @@ export async function sendOrderStatusNotification(input: {
         error instanceof WhatsAppError
           ? error.code
           : "WHATSAPP_SEND_FAILED",
+    });
+  }
+}
+
+export async function sendReviewRequest(input: {
+  orderId: string;
+  orderNumber: string;
+  customerPhone: string;
+  restaurantName: string;
+  reviewUrl: string;
+  language?: string;
+}) {
+  if (!isWhatsAppConfigured()) return;
+  try {
+    await sendCustomerNotification(
+      "review_request",
+      input.customerPhone,
+      [input.restaurantName, input.orderNumber, input.reviewUrl],
+      input.language || "ar",
+    );
+  } catch (error) {
+    log("error", "review_request_failed", {
+      orderId: input.orderId,
+      code: error instanceof WhatsAppError ? error.code : "WHATSAPP_SEND_FAILED",
     });
   }
 }

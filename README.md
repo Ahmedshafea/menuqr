@@ -144,6 +144,7 @@ WHATSAPP_TEMPLATE_ORDER_CANCELLED=order_cancelled
 WHATSAPP_TEMPLATE_NEW_ORDER=new_restaurant_order
 WHATSAPP_TEMPLATE_PAYMENT_SUCCESSFUL=payment_successful
 WHATSAPP_TEMPLATE_PAYMENT_FAILED=payment_failed
+WHATSAPP_TEMPLATE_REVIEW_REQUEST=review_request
 OTP_HASH_SECRET=
 OTP_EXPIRE_MINUTES=5
 OTP_LENGTH=6
@@ -158,6 +159,14 @@ templates or different approved language codes, set the `_AR`, `_EN`, and
 `_LANGUAGE_AR`/`_LANGUAGE_EN` values to the exact names and language codes shown
 in WhatsApp Manager. A template name and language form one exact Meta lookup;
 an approved English translation does not make the Arabic translation exist.
+
+Review photos use the public Supabase Storage bucket `review-images`. Create it
+once beside the existing restaurant and product image buckets before enabling
+review images. Files remain limited to JPEG, PNG, WebP, or AVIF and 5 MB each;
+the public form accepts at most three images.
+
+The approved `review_request` WhatsApp template receives:
+restaurant name, order number, and the secure review URL, in that order.
 `WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
 to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
 characters and can fall back to `AUTH_SECRET`.
