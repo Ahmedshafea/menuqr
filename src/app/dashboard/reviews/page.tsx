@@ -137,11 +137,13 @@ export default async function ReviewsPage({
     statusCounts.map((item) => [item.status, item._count._all]),
   );
 
-  async function manage(form: FormData) {
+  async function manage(
+    id: string,
+    action: "reply" | "report" | "PUBLISHED" | "HIDDEN",
+    form: FormData,
+  ) {
     "use server";
     const { restaurantId: currentRestaurantId } = await requireTenant();
-    const action = String(form.get("action") || "");
-    const id = String(form.get("id") || "");
     let result = "invalid";
     if (!id) redirect("/dashboard/reviews?result=invalid");
 
@@ -176,6 +178,18 @@ export default async function ReviewsPage({
         result = action === "PUBLISHED" ? "published" : "hidden";
     }
 
+    if (result === "invalid") {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          context: "review-moderation",
+          message: "REVIEW_ACTION_NOT_APPLIED",
+          action,
+          reviewIdPresent: Boolean(id),
+          restaurantIdPresent: Boolean(currentRestaurantId),
+        }),
+      );
+    }
     revalidatePath("/dashboard/reviews");
     revalidatePath(`/menu/${restaurant.slug}`);
     revalidatePath(`/menu/${restaurant.slug}/reviews`);
@@ -317,41 +331,37 @@ export default async function ReviewsPage({
               </blockquote>
             )}
 
-            <form action={manage} className="review-actions">
-              <input type="hidden" name="id" value={review.id} />
+            <div className="review-actions">
               <div className="review-moderation-actions">
                 {review.status !== "PUBLISHED" && (
-                  <button
-                    className="button primary"
-                    type="submit"
-                    name="action"
-                    value="PUBLISHED"
-                  >
-                    {t("publish")}
-                  </button>
+                  <form action={manage.bind(null, review.id, "PUBLISHED")}>
+                    <button className="button primary" type="submit">
+                      {t("publish")}
+                    </button>
+                  </form>
                 )}
                 {review.status !== "HIDDEN" && (
-                  <button
-                    className="button ghost"
-                    type="submit"
-                    name="action"
-                    value="HIDDEN"
-                  >
-                    {t("hide")}
-                  </button>
+                  <form action={manage.bind(null, review.id, "HIDDEN")}>
+                    <button className="button ghost" type="submit">
+                      {t("hide")}
+                    </button>
+                  </form>
                 )}
-                <button
-                  className="button danger"
-                  type="submit"
-                  name="action"
-                  value="report"
-                  disabled={Boolean(review.abuseReportedAt)}
-                >
-                  {review.abuseReportedAt ? t("reported") : t("report")}
-                </button>
+                <form action={manage.bind(null, review.id, "report")}>
+                  <button
+                    className="button danger"
+                    type="submit"
+                    disabled={Boolean(review.abuseReportedAt)}
+                  >
+                    {review.abuseReportedAt ? t("reported") : t("report")}
+                  </button>
+                </form>
               </div>
               {!review.ownerReply && (
-                <div className="review-reply-row">
+                <form
+                  action={manage.bind(null, review.id, "reply")}
+                  className="review-reply-row"
+                >
                   <input
                     name="reply"
                     maxLength={1000}
@@ -360,14 +370,12 @@ export default async function ReviewsPage({
                   <button
                     className="button ghost"
                     type="submit"
-                    name="action"
-                    value="reply"
                   >
                     {t("reply")}
                   </button>
-                </div>
+                </form>
               )}
-            </form>
+            </div>
           </article>
         ))}
       </div>
