@@ -129,6 +129,7 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
   if (typeof init.body === "string") {
     try {
       const payload = JSON.parse(init.body) as {
+        to?: string;
         type?: string;
         template?: {
           name?: string;
@@ -147,7 +148,9 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
           type: component.type,
           parameterCount: component.parameters?.length ?? 0,
         })),
-        recipientPresent: true,
+        recipient: payload.to
+          ? `${payload.to.slice(0, 3)}***${payload.to.slice(-2)}`
+          : undefined,
       };
     } catch {
       payloadSummary = { bodyPresent: true };
@@ -198,6 +201,9 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
             ? "WHATSAPP_RATE_LIMITED"
             : "WHATSAPP_API_ERROR";
     log("error", "api_error", {
+      url,
+      templateName: payloadSummary?.templateName,
+      recipient: payloadSummary?.recipient,
       status: response.status,
       metaCode: body.error?.code,
       subcode: body.error?.error_subcode,
@@ -308,8 +314,11 @@ interface SendOrderCreatedNotificationsInput {
   restaurantPhone: string;
   customerName: string;
   customerPhone: string;
-  total: number;
-  trackingUrl: string;
+  total: string | number;
+  orderType: string;
+  orderTime: string;
+  customerOrderUrl: string;
+  restaurantOrderUrl: string;
   language?: string;
 }
 
@@ -334,13 +343,25 @@ export async function sendOrderCreatedNotifications(
     sendCustomerNotification(
       "order_received",
       input.customerPhone,
-      [input.orderNumber, input.restaurantName, input.trackingUrl],
+      [
+        input.customerName,
+        input.orderNumber,
+        input.total,
+        input.customerOrderUrl,
+      ],
       language,
     ),
     sendRestaurantNotification(
       "new_order",
       input.restaurantPhone,
-      [input.orderNumber, input.customerName, input.total, input.trackingUrl],
+      [
+        input.orderNumber,
+        input.customerName,
+        input.total,
+        input.orderType,
+        input.orderTime,
+        input.restaurantOrderUrl,
+      ],
       language,
     ),
   ]);
@@ -363,14 +384,11 @@ export async function sendOrderCreatedNotifications(
 const ORDER_STATUS_NOTIFICATIONS: Partial<
   Record<OrderStatus, CustomerNotificationType>
 > = {
-  CONFIRMED: "order_accepted",
   PREPARING: "order_preparing",
   READY: "order_ready",
   OUT_FOR_DELIVERY: "order_out_for_delivery",
   DELIVERED: "order_delivered",
-  COMPLETED: "order_delivered",
   CANCELLED: "order_cancelled",
-  REJECTED: "order_cancelled",
 };
 
 export async function sendOrderStatusNotification(input: {
@@ -379,6 +397,7 @@ export async function sendOrderStatusNotification(input: {
   orderNumber: string;
   customerPhone: string;
   restaurantName: string;
+  customerOrderUrl: string;
   language?: string;
 }) {
   const notificationType = ORDER_STATUS_NOTIFICATIONS[input.status];
@@ -395,7 +414,7 @@ export async function sendOrderStatusNotification(input: {
     await sendCustomerNotification(
       notificationType,
       input.customerPhone,
-      [input.orderNumber, input.restaurantName],
+      [input.orderNumber, input.restaurantName, input.customerOrderUrl],
       input.language || "ar",
     );
   } catch (error) {
