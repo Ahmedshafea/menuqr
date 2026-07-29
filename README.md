@@ -127,7 +127,13 @@ WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_API_VERSION=v23.0
 DEFAULT_PHONE_COUNTRY_CODE=20
+WHATSAPP_TEMPLATE_LANGUAGE_AR=ar_EG
+WHATSAPP_TEMPLATE_LANGUAGE_EN=en
 WHATSAPP_TEMPLATE_OTP=otp_verification
+WHATSAPP_TEMPLATE_OTP_AR=
+WHATSAPP_TEMPLATE_OTP_EN=
+WHATSAPP_TEMPLATE_OTP_LANGUAGE_AR=ar_EG
+WHATSAPP_TEMPLATE_OTP_LANGUAGE_EN=en
 WHATSAPP_TEMPLATE_ORDER_RECEIVED=order_received
 WHATSAPP_TEMPLATE_ORDER_ACCEPTED=order_accepted
 WHATSAPP_TEMPLATE_ORDER_PREPARING=order_preparing
@@ -147,6 +153,11 @@ OTP_LENGTH=6
 `WHATSAPP_TOKEN` remains accepted as a backwards-compatible alias.
 `DEFAULT_PHONE_COUNTRY_CODE` is used only when a user enters a local number
 beginning with `0`; Egypt uses `20`.
+`WHATSAPP_TEMPLATE_OTP` is the shared fallback template. If Meta uses separate
+templates or different approved language codes, set the `_AR`, `_EN`, and
+`_LANGUAGE_AR`/`_LANGUAGE_EN` values to the exact names and language codes shown
+in WhatsApp Manager. A template name and language form one exact Meta lookup;
+an approved English translation does not make the Arabic translation exist.
 `WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
 to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
 characters and can fall back to `AUTH_SECRET`.

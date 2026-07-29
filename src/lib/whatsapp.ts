@@ -7,25 +7,41 @@ import type {
 import type { OrderStatus } from "@prisma/client";
 import { InvalidPhoneError, normalizePhoneE164 } from "@/lib/phone";
 
+function environmentValue(name: string) {
+  const trimmed = process.env[name]?.trim() ?? "";
+  const quoted =
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"));
+  return quoted ? trimmed.slice(1, -1).trim() : trimmed;
+}
+
+function metaTemplateLanguage(language: string) {
+  if (language === "ar")
+    return environmentValue("WHATSAPP_TEMPLATE_LANGUAGE_AR") || "ar_EG";
+  if (language === "en")
+    return environmentValue("WHATSAPP_TEMPLATE_LANGUAGE_EN") || "en";
+  return language;
+}
+
 const CUSTOMER_TEMPLATES: Record<CustomerNotificationType, string> = {
-  order_received: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED || "order_received",
-  order_accepted: process.env.WHATSAPP_TEMPLATE_ORDER_ACCEPTED || "order_accepted",
-  order_preparing: process.env.WHATSAPP_TEMPLATE_ORDER_PREPARING || "order_preparing",
-  order_ready: process.env.WHATSAPP_TEMPLATE_ORDER_READY || "order_ready",
-  order_out_for_delivery: process.env.WHATSAPP_TEMPLATE_ORDER_OUT_FOR_DELIVERY || "order_out_for_delivery",
-  order_delivered: process.env.WHATSAPP_TEMPLATE_ORDER_DELIVERED || "order_delivered",
-  order_cancelled: process.env.WHATSAPP_TEMPLATE_ORDER_CANCELLED || "order_cancelled",
-  payment_successful: process.env.WHATSAPP_TEMPLATE_PAYMENT_SUCCESSFUL || "payment_successful",
-  payment_failed: process.env.WHATSAPP_TEMPLATE_PAYMENT_FAILED || "payment_failed",
+  order_received: environmentValue("WHATSAPP_TEMPLATE_ORDER_RECEIVED") || "order_received",
+  order_accepted: environmentValue("WHATSAPP_TEMPLATE_ORDER_ACCEPTED") || "order_accepted",
+  order_preparing: environmentValue("WHATSAPP_TEMPLATE_ORDER_PREPARING") || "order_preparing",
+  order_ready: environmentValue("WHATSAPP_TEMPLATE_ORDER_READY") || "order_ready",
+  order_out_for_delivery: environmentValue("WHATSAPP_TEMPLATE_ORDER_OUT_FOR_DELIVERY") || "order_out_for_delivery",
+  order_delivered: environmentValue("WHATSAPP_TEMPLATE_ORDER_DELIVERED") || "order_delivered",
+  order_cancelled: environmentValue("WHATSAPP_TEMPLATE_ORDER_CANCELLED") || "order_cancelled",
+  payment_successful: environmentValue("WHATSAPP_TEMPLATE_PAYMENT_SUCCESSFUL") || "payment_successful",
+  payment_failed: environmentValue("WHATSAPP_TEMPLATE_PAYMENT_FAILED") || "payment_failed",
 };
 
 const RESTAURANT_TEMPLATES: Record<RestaurantNotificationType, string> = {
-  new_order: process.env.WHATSAPP_TEMPLATE_NEW_ORDER || "new_restaurant_order",
-  order_cancelled: process.env.WHATSAPP_TEMPLATE_RESTAURANT_ORDER_CANCELLED || "restaurant_order_cancelled",
-  customer_paid: process.env.WHATSAPP_TEMPLATE_CUSTOMER_PAID || "customer_paid",
-  subscription_expiring: process.env.WHATSAPP_TEMPLATE_SUBSCRIPTION_EXPIRING || "subscription_expiring",
-  subscription_expired: process.env.WHATSAPP_TEMPLATE_SUBSCRIPTION_EXPIRED || "subscription_expired",
-  new_customer_message: process.env.WHATSAPP_TEMPLATE_NEW_CUSTOMER_MESSAGE || "new_customer_message",
+  new_order: environmentValue("WHATSAPP_TEMPLATE_NEW_ORDER") || "new_restaurant_order",
+  order_cancelled: environmentValue("WHATSAPP_TEMPLATE_RESTAURANT_ORDER_CANCELLED") || "restaurant_order_cancelled",
+  customer_paid: environmentValue("WHATSAPP_TEMPLATE_CUSTOMER_PAID") || "customer_paid",
+  subscription_expiring: environmentValue("WHATSAPP_TEMPLATE_SUBSCRIPTION_EXPIRING") || "subscription_expiring",
+  subscription_expired: environmentValue("WHATSAPP_TEMPLATE_SUBSCRIPTION_EXPIRED") || "subscription_expired",
+  new_customer_message: environmentValue("WHATSAPP_TEMPLATE_NEW_CUSTOMER_MESSAGE") || "new_customer_message",
 };
 
 export const WHATSAPP_NOTIFICATION_TYPES = [
@@ -33,7 +49,19 @@ export const WHATSAPP_NOTIFICATION_TYPES = [
 ] as [WhatsAppNotificationType, ...WhatsAppNotificationType[]];
 
 export class WhatsAppError extends Error {
-  constructor(public code: string, public status: number, public retryAfter?: number) { super(code); }
+  constructor(
+    public code: string,
+    public status: number,
+    public retryAfter?: number,
+    public meta?: {
+      httpStatus?: number;
+      code?: number;
+      subcode?: number;
+      message?: string;
+    },
+  ) {
+    super(code);
+  }
 }
 
 export function normalizeE164(input: string) {
@@ -48,10 +76,11 @@ export function normalizeE164(input: string) {
 
 function config() {
   const token =
-    process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const wabaId = process.env.WHATSAPP_WABA_ID;
-  const version = process.env.WHATSAPP_API_VERSION || "v23.0";
+    environmentValue("WHATSAPP_ACCESS_TOKEN") ||
+    environmentValue("WHATSAPP_TOKEN");
+  const phoneNumberId = environmentValue("WHATSAPP_PHONE_NUMBER_ID");
+  const wabaId = environmentValue("WHATSAPP_WABA_ID");
+  const version = environmentValue("WHATSAPP_API_VERSION") || "v23.0";
   if (!token || !phoneNumberId)
     throw new WhatsAppError("WHATSAPP_NOT_CONFIGURED", 503);
   return { token, phoneNumberId, wabaId, version, baseUrl: `https://graph.facebook.com/${version}` };
@@ -59,23 +88,25 @@ function config() {
 
 export function isWhatsAppConfigured() {
   return Boolean(
-    (process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN) &&
-      process.env.WHATSAPP_PHONE_NUMBER_ID,
+    (environmentValue("WHATSAPP_ACCESS_TOKEN") ||
+      environmentValue("WHATSAPP_TOKEN")) &&
+      environmentValue("WHATSAPP_PHONE_NUMBER_ID"),
   );
 }
 
 export function getWhatsAppConfigurationStatus() {
   return {
     accessToken: Boolean(
-      process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN,
+      environmentValue("WHATSAPP_ACCESS_TOKEN") ||
+        environmentValue("WHATSAPP_TOKEN"),
     ),
-    phoneNumberId: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
-    wabaId: Boolean(process.env.WHATSAPP_WABA_ID),
-    verifyToken: Boolean(process.env.WHATSAPP_VERIFY_TOKEN),
-    appSecret: Boolean(process.env.WHATSAPP_APP_SECRET),
+    phoneNumberId: Boolean(environmentValue("WHATSAPP_PHONE_NUMBER_ID")),
+    wabaId: Boolean(environmentValue("WHATSAPP_WABA_ID")),
+    verifyToken: Boolean(environmentValue("WHATSAPP_VERIFY_TOKEN")),
+    appSecret: Boolean(environmentValue("WHATSAPP_APP_SECRET")),
     otpTemplate: Boolean(
-      process.env.WHATSAPP_TEMPLATE_OTP ||
-        process.env.WHATSAPP_OTP_TEMPLATE,
+      environmentValue("WHATSAPP_TEMPLATE_OTP") ||
+        environmentValue("WHATSAPP_OTP_TEMPLATE"),
     ),
   };
 }
@@ -158,21 +189,41 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
       await new Promise((resolve) => setTimeout(resolve, Math.min((retryAfter ?? 1) * 1000, 3000)));
       continue;
     }
-    const code = response.status === 401 ? "WHATSAPP_TOKEN_EXPIRED" : response.status === 429 ? "WHATSAPP_RATE_LIMITED" : "WHATSAPP_API_ERROR";
+    const code =
+      body.error?.code === 132001
+        ? "WHATSAPP_TEMPLATE_NOT_FOUND"
+        : response.status === 401
+          ? "WHATSAPP_TOKEN_EXPIRED"
+          : response.status === 429
+            ? "WHATSAPP_RATE_LIMITED"
+            : "WHATSAPP_API_ERROR";
     log("error", "api_error", {
       status: response.status,
       metaCode: body.error?.code,
       subcode: body.error?.error_subcode,
       metaMessage: safeMetaMessage(body.error?.message),
     });
-    throw new WhatsAppError(code, response.status === 429 ? 429 : 502, retryAfter);
+    throw new WhatsAppError(
+      code,
+      response.status === 429 ? 429 : 502,
+      retryAfter,
+      {
+        httpStatus: response.status,
+        code: body.error?.code,
+        subcode: body.error?.error_subcode,
+        message: safeMetaMessage(body.error?.message),
+      },
+    );
   }
   throw new WhatsAppError("WHATSAPP_API_ERROR", 502);
 }
 
 async function record(response: WhatsAppApiResponse, input: { notificationType?: string; templateName?: string }) {
   const id = response.messages?.[0]?.id;
-  if (!id) throw new WhatsAppError("WHATSAPP_INVALID_RESPONSE", 502);
+  if (!id)
+    throw new WhatsAppError("WHATSAPP_INVALID_RESPONSE", 502, undefined, {
+      message: "Meta response did not include a message id",
+    });
   await prisma.whatsAppMessage.upsert({
     where: { metaMessageId: id },
     create: { metaMessageId: id, notificationType: input.notificationType, templateName: input.templateName, status: response.messages?.[0]?.message_status || "accepted" },
@@ -195,7 +246,7 @@ export async function sendTemplate(input: SendTemplateInput) {
       messaging_product: "whatsapp", recipient_type: "individual", to, type: "template",
       template: {
         name: input.templateName,
-        language: { code: input.language || "ar" },
+        language: { code: metaTemplateLanguage(input.language || "ar") },
         components: input.components ?? bodyComponent(input.variables ?? []),
       },
     }),
@@ -215,12 +266,26 @@ export async function sendText(toInput: string, text: string) {
 }
 
 export function sendOTP(to: string, code: string, language = "ar") {
+  const english = language.toLowerCase().startsWith("en");
   const templateName =
-    process.env.WHATSAPP_TEMPLATE_OTP ||
-    process.env.WHATSAPP_OTP_TEMPLATE ||
+    environmentValue(
+      english ? "WHATSAPP_TEMPLATE_OTP_EN" : "WHATSAPP_TEMPLATE_OTP_AR",
+    ) ||
+    environmentValue("WHATSAPP_TEMPLATE_OTP") ||
+    environmentValue("WHATSAPP_OTP_TEMPLATE") ||
     "otp_verification";
+  const templateLanguage =
+    environmentValue(
+      english
+        ? "WHATSAPP_TEMPLATE_OTP_LANGUAGE_EN"
+        : "WHATSAPP_TEMPLATE_OTP_LANGUAGE_AR",
+    ) ||
+    metaTemplateLanguage(english ? "en" : "ar");
   return sendTemplate({
-    to, templateName, language, notificationType: "otp",
+    to,
+    templateName,
+    language: templateLanguage,
+    notificationType: "otp",
     components: [
       { type: "body", parameters: [{ type: "text", text: code }] },
       { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
