@@ -5,6 +5,7 @@ import type {
   TemplateVariable, WhatsAppApiResponse, WhatsAppNotificationType, WhatsAppTemplateComponent,
 } from "@/types/whatsapp";
 import type { OrderStatus } from "@prisma/client";
+import { InvalidPhoneError, normalizePhoneE164 } from "@/lib/phone";
 
 const CUSTOMER_TEMPLATES: Record<CustomerNotificationType, string> = {
   order_received: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED || "order_received",
@@ -36,11 +37,13 @@ export class WhatsAppError extends Error {
 }
 
 export function normalizeE164(input: string) {
-  const trimmed = input.trim();
-  const prefixed = trimmed.startsWith("00") ? `+${trimmed.slice(2)}` : trimmed;
-  const normalized = `+${prefixed.replace(/\D/g, "")}`;
-  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) throw new WhatsAppError("INVALID_PHONE", 400);
-  return normalized;
+  try {
+    return normalizePhoneE164(input);
+  } catch (error) {
+    if (error instanceof InvalidPhoneError)
+      throw new WhatsAppError("INVALID_PHONE", 400);
+    throw error;
+  }
 }
 
 function config() {
@@ -61,17 +64,74 @@ export function isWhatsAppConfigured() {
   );
 }
 
+export function getWhatsAppConfigurationStatus() {
+  return {
+    accessToken: Boolean(
+      process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN,
+    ),
+    phoneNumberId: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
+    wabaId: Boolean(process.env.WHATSAPP_WABA_ID),
+    verifyToken: Boolean(process.env.WHATSAPP_VERIFY_TOKEN),
+    appSecret: Boolean(process.env.WHATSAPP_APP_SECRET),
+    otpTemplate: Boolean(
+      process.env.WHATSAPP_TEMPLATE_OTP ||
+        process.env.WHATSAPP_OTP_TEMPLATE,
+    ),
+  };
+}
+
 function log(level: "info" | "error", event: string, metadata: Record<string, unknown> = {}) {
   const writer = level === "error" ? console.error : console.info;
   writer(JSON.stringify({ level, context: "whatsapp", event, ...metadata, timestamp: new Date().toISOString() }));
 }
 
+function safeMetaMessage(message: string | undefined) {
+  return message
+    ?.slice(0, 300)
+    .replace(/\+?\d{8,15}/g, "[redacted-phone]");
+}
+
 async function graphRequest<T>(path: string, init: RequestInit, retry = true): Promise<T> {
   const { token, baseUrl } = config();
+  const url = `${baseUrl}/${path}`;
+  let payloadSummary: Record<string, unknown> | undefined;
+  if (typeof init.body === "string") {
+    try {
+      const payload = JSON.parse(init.body) as {
+        type?: string;
+        template?: {
+          name?: string;
+          language?: { code?: string };
+          components?: Array<{
+            type?: string;
+            parameters?: unknown[];
+          }>;
+        };
+      };
+      payloadSummary = {
+        type: payload.type,
+        templateName: payload.template?.name,
+        language: payload.template?.language?.code,
+        components: payload.template?.components?.map((component) => ({
+          type: component.type,
+          parameterCount: component.parameters?.length ?? 0,
+        })),
+        recipientPresent: true,
+      };
+    } catch {
+      payloadSummary = { bodyPresent: true };
+    }
+  }
   for (let attempt = 0; attempt < (retry ? 3 : 1); attempt++) {
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}/${path}`, {
+      log("info", "api_request", {
+        url,
+        method: init.method || "GET",
+        attempt: attempt + 1,
+        payload: payloadSummary,
+      });
+      response = await fetch(url, {
         ...init,
         headers: { Authorization: `Bearer ${token}`, "content-type": "application/json", ...init.headers },
         signal: AbortSignal.timeout(12_000),
@@ -82,7 +142,15 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
     }
     const body = await response.json().catch(() => ({})) as { error?: { code?: number; message?: string; error_subcode?: number } } & T;
     if (response.ok) {
-      log("info", "api_response", { status: response.status });
+      const successful = body as {
+        messages?: Array<{ id?: string; message_status?: string }>;
+      };
+      log("info", "api_response", {
+        url,
+        status: response.status,
+        messageAccepted: Boolean(successful.messages?.[0]?.id),
+        messageStatus: successful.messages?.[0]?.message_status,
+      });
       return body;
     }
     const retryAfter = Number(response.headers.get("retry-after") || 0) || undefined;
@@ -95,7 +163,7 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
       status: response.status,
       metaCode: body.error?.code,
       subcode: body.error?.error_subcode,
-      metaMessage: body.error?.message?.slice(0, 300),
+      metaMessage: safeMetaMessage(body.error?.message),
     });
     throw new WhatsAppError(code, response.status === 429 ? 429 : 502, retryAfter);
   }
