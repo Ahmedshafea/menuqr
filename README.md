@@ -126,6 +126,7 @@ WHATSAPP_WABA_ID=
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_API_VERSION=v23.0
+DEFAULT_PHONE_COUNTRY_CODE=20
 WHATSAPP_TEMPLATE_OTP=otp_verification
 WHATSAPP_TEMPLATE_ORDER_RECEIVED=order_received
 WHATSAPP_TEMPLATE_ORDER_ACCEPTED=order_accepted
@@ -144,6 +145,8 @@ OTP_LENGTH=6
 
 `WHATSAPP_ACCESS_TOKEN` should be a permanent System User token in production.
 `WHATSAPP_TOKEN` remains accepted as a backwards-compatible alias.
+`DEFAULT_PHONE_COUNTRY_CODE` is used only when a user enters a local number
+beginning with `0`; Egypt uses `20`.
 `WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
 to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
 characters and can fall back to `AUTH_SECRET`.
