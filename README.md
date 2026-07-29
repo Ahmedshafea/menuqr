@@ -141,7 +141,7 @@ WHATSAPP_TEMPLATE_ORDER_READY=order_ready
 WHATSAPP_TEMPLATE_ORDER_OUT_FOR_DELIVERY=order_out_for_delivery
 WHATSAPP_TEMPLATE_ORDER_DELIVERED=order_delivered
 WHATSAPP_TEMPLATE_ORDER_CANCELLED=order_cancelled
-WHATSAPP_TEMPLATE_NEW_ORDER=new_restaurant_order
+WHATSAPP_TEMPLATE_NEW_ORDER=new_restaurant_order_received
 WHATSAPP_TEMPLATE_PAYMENT_SUCCESSFUL=payment_successful
 WHATSAPP_TEMPLATE_PAYMENT_FAILED=payment_failed
 WHATSAPP_TEMPLATE_REVIEW_REQUEST=review_request
@@ -167,6 +167,18 @@ the public form accepts at most three images.
 
 The approved `review_request` WhatsApp template receives:
 restaurant name, order number, and the secure review URL, in that order.
+
+The approved `new_restaurant_order_received` template receives six body variables in
+this exact order: order number, customer name, customer phone, formatted total,
+order type, and order time. Its first dynamic URL button receives the order ID
+as its URL suffix (for example,
+`https://menuqr-eg.vercel.app/dashboard/orders/{{1}}`).
+
+The approved `order_received` customer template receives five body variables in
+this exact order: customer name, order number, restaurant name, restaurant
+phone, and formatted total. Its first dynamic URL button receives the secure
+public order token as its URL suffix (for example,
+`https://menuqr-eg.vercel.app/order/{{1}}`).
 `WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
 to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
 characters and can fall back to `AUTH_SECRET`.

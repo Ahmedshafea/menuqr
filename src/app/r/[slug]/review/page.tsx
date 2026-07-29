@@ -8,6 +8,7 @@ import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { ReviewForm } from "@/components/review-form";
 import Image from "next/image";
+import { getLocale, getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,12 @@ export default async function RestaurantReviewFormPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ order?: string; result?: string }>;
 }) {
-  const { slug } = await params;
-  const query = await searchParams;
+  const [{ slug }, query, locale, t] = await Promise.all([
+    params,
+    searchParams,
+    getLocale(),
+    getTranslations("reviews.public"),
+  ]);
   const restaurant = await prisma.restaurant.findUnique({
     where: { slug },
     select: {
@@ -46,7 +51,7 @@ export default async function RestaurantReviewFormPage({
   });
   if (!restaurant?.settings?.reviewsEnabled) notFound();
   const currentRestaurant = restaurant;
-  const arabic = currentRestaurant.locale === "ar";
+  const arabic = locale === "ar";
 
   async function submit(form: FormData) {
     "use server";
@@ -168,19 +173,26 @@ export default async function RestaurantReviewFormPage({
           <Image src={currentRestaurant.logoUrl} alt="" width={88} height={88} />
         )}
         <h1>{arabic && currentRestaurant.nameAr ? currentRestaurant.nameAr : currentRestaurant.name}</h1>
-        <p>
-          {query.result === "success"
-            ? arabic
-              ? "شكرًا لمشاركتنا رأيك ❤️"
-              : "Thank you for your feedback ❤️"
-            : arabic
-              ? "ساعدنا في تحسين تجربتك"
-              : "Help us improve your experience"}
-        </p>
+        <p>{query.result === "success" ? t("thankYou") : t("helpImprove")}</p>
+        {query.result &&
+          query.result !== "success" &&
+          ["limited", "invalid", "orderRequired", "nameRequired", "duplicate"].includes(
+            query.result,
+          ) && (
+            <p className="review-result is-error" role="alert">
+              {t(
+                query.result as
+                  | "limited"
+                  | "invalid"
+                  | "orderRequired"
+                  | "nameRequired"
+                  | "duplicate",
+              )}
+            </p>
+          )}
         {query.result !== "success" && (
           <ReviewForm
             action={submit}
-            arabic={arabic}
             allowImages={currentRestaurant.settings?.reviewImagesEnabled ?? false}
           />
         )}
