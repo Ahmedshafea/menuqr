@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/validators";
-import { whatsappUrl } from "@/lib/utils";
+import { publicOrderUrl, whatsappUrl } from "@/lib/utils";
 import { isRestaurantOpen } from "@/lib/restaurant-hours";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
@@ -274,14 +274,32 @@ export async function POST(request: Request) {
   });
   const restaurantName =
     arabic && restaurant.nameAr ? restaurant.nameAr : restaurant.name;
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    new URL(request.url).origin;
-  const trackingUrl = `${origin}/order/${accessToken}`;
+  const trackingUrl = publicOrderUrl(accessToken, request.url);
   const message = arabic
     ? `طلب جديد #${number} من ${data.customerName} إلى ${restaurantName}\n\nعرض الطلب والتواصل مع العميل:\n${trackingUrl}`
     : `New order #${number} from ${data.customerName} for ${restaurantName}\n\nView the order and contact the customer:\n${trackingUrl}`;
   try {
+    const notificationLocale = arabic ? "ar-EG" : "en";
+    const formattedTotal = new Intl.NumberFormat(notificationLocale, {
+      style: "currency",
+      currency: restaurant.currency,
+    }).format(pricing.total);
+    const orderType = arabic
+      ? {
+          DELIVERY: "توصيل",
+          PICKUP: "استلام من المطعم",
+          DINE_IN: "داخل المطعم",
+        }[data.fulfillmentType]
+      : {
+          DELIVERY: "Delivery",
+          PICKUP: "Pickup",
+          DINE_IN: "Dine-in",
+        }[data.fulfillmentType];
+    const orderTime = new Intl.DateTimeFormat(notificationLocale, {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "Africa/Cairo",
+    }).format(order.createdAt);
     await sendOrderCreatedNotifications({
       orderId: order.id,
       orderNumber: number,
@@ -289,8 +307,14 @@ export async function POST(request: Request) {
       restaurantPhone: restaurant.whatsapp,
       customerName: data.customerName,
       customerPhone: data.customerPhone,
-      total: pricing.total,
-      trackingUrl,
+      total: formattedTotal,
+      orderType,
+      orderTime,
+      customerOrderUrl: trackingUrl,
+      // `/order/[accessToken]` is the existing secure order workspace. It is
+      // public for the customer and reveals management controls only to an
+      // authenticated restaurant member.
+      restaurantOrderUrl: trackingUrl,
       language: arabic ? "ar" : "en",
     });
   } catch (error) {

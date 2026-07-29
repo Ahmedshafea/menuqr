@@ -8,7 +8,7 @@ import { z } from "zod";
 import { Copy, Gift, MessageCircle, Minus, Phone, Plus, RefreshCw, Store, Trash2, UserRound } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { whatsappUrl } from "@/lib/utils";
+import { publicOrderUrl, whatsappUrl } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { recalculateOrder, requireManagedOrder } from "@/lib/order-management";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
@@ -420,9 +420,13 @@ export default async function OrderTrackingPage({
       "FAILED_DELIVERY",
     ] as const;
     if (!allowed.includes(next as (typeof allowed)[number])) return;
-    await prisma.$transaction(async (tx) => {
-      await tx.order.update({
-        where: { id: order.id },
+    const changed = await prisma.$transaction(async (tx) => {
+      const update = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          restaurantId: order.restaurantId,
+          status: { not: next as (typeof allowed)[number] },
+        },
         data: {
           status: next as (typeof allowed)[number],
           ...(next === "OUT_FOR_DELIVERY"
@@ -431,6 +435,7 @@ export default async function OrderTrackingPage({
           ...(next === "DELIVERED" ? { deliveredAt: new Date() } : {}),
         },
       });
+      if (update.count === 0) return false;
       await tx.orderStatusHistory.create({
         data: {
           orderId: order.id,
@@ -456,18 +461,21 @@ export default async function OrderTrackingPage({
           where: { id: order.driverId },
           data: { status: "AVAILABLE" },
         });
+      return true;
     });
-    await sendOrderStatusNotification({
-      orderId: order.id,
-      status: next as (typeof allowed)[number],
-      orderNumber: order.orderNumber,
-      customerPhone: order.customerPhone,
-      restaurantName:
-        order.restaurant.locale === "ar" && order.restaurant.nameAr
-          ? order.restaurant.nameAr
-          : order.restaurant.name,
-      language: order.restaurant.locale === "ar" ? "ar" : "en",
-    });
+    if (changed)
+      await sendOrderStatusNotification({
+        orderId: order.id,
+        status: next as (typeof allowed)[number],
+        orderNumber: order.orderNumber,
+        customerPhone: order.customerPhone,
+        restaurantName:
+          order.restaurant.locale === "ar" && order.restaurant.nameAr
+            ? order.restaurant.nameAr
+            : order.restaurant.name,
+        customerOrderUrl: publicOrderUrl(order.accessToken),
+        language: order.restaurant.locale === "ar" ? "ar" : "en",
+      });
     revalidatePath(`/order/${token}`);
   }
 

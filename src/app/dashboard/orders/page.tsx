@@ -7,6 +7,7 @@ import type { OrderStatus, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
 import { sendOrderStatusNotification } from "@/lib/whatsapp";
+import { publicOrderUrl } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 const statuses = [
   "NEW",
@@ -74,25 +75,71 @@ export default async function OrdersPage({
     "use server";
     const { restaurantId, session } = await requireTenant();
     const id = String(form.get("id"));
-    const accessToken = String(form.get("accessToken") ?? "");
     const next = String(form.get("status")) as OrderStatus;
     if (!statuses.includes(next)) return;
-    const order = await prisma.order.findFirst({ where: { id, restaurantId }, select: { id: true,driverId:true,customerPhone:true,orderNumber:true } });
+    const order = await prisma.order.findFirst({ where: { id, restaurantId }, select: { id: true,driverId:true,customerPhone:true,orderNumber:true,accessToken:true } });
     if (!order||next==="ASSIGNED_TO_DRIVER"&&!order.driverId) return;
-    await prisma.$transaction(async tx=>{await tx.order.update({ where: { id }, data: { status: next,...(next==="OUT_FOR_DELIVERY"?{outForDeliveryAt:new Date()} :{}),...(next==="DELIVERED"||next==="COMPLETED"?{deliveredAt:new Date()}: {}) } });await tx.orderStatusHistory.create({ data: { orderId: id, status: next, userId: session.user.id } });await tx.orderActionLog.create({ data: { orderId: id, userId: session.user.id, action: "STATUS_UPDATED", details: { status: next } } });if(order.driverId&&(next==="DELIVERED"||next==="COMPLETED"||next==="FAILED_DELIVERY"))await tx.deliveryDriver.update({where:{id:order.driverId},data:{status:"AVAILABLE"}});if(next==="DELIVERED")await tx.restaurantNotification.create({data:{restaurantId,type:"DELIVERY_COMPLETED",title:"Delivery completed",href:`/order/${accessToken}`}})});
-    await sendOrderStatusNotification({
-      orderId: order.id,
-      status: next,
-      orderNumber: order.orderNumber,
-      customerPhone: order.customerPhone,
-      restaurantName:
-        restaurant.locale === "ar" && restaurant.nameAr
-          ? restaurant.nameAr
-          : restaurant.name,
-      language: restaurant.locale === "ar" ? "ar" : "en",
+    const changed = await prisma.$transaction(async (tx) => {
+      const update = await tx.order.updateMany({
+        where: { id, restaurantId, status: { not: next } },
+        data: {
+          status: next,
+          ...(next === "OUT_FOR_DELIVERY"
+            ? { outForDeliveryAt: new Date() }
+            : {}),
+          ...(next === "DELIVERED" || next === "COMPLETED"
+            ? { deliveredAt: new Date() }
+            : {}),
+        },
+      });
+      if (update.count === 0) return false;
+      await tx.orderStatusHistory.create({
+        data: { orderId: id, status: next, userId: session.user.id },
+      });
+      await tx.orderActionLog.create({
+        data: {
+          orderId: id,
+          userId: session.user.id,
+          action: "STATUS_UPDATED",
+          details: { status: next },
+        },
+      });
+      if (
+        order.driverId &&
+        (next === "DELIVERED" ||
+          next === "COMPLETED" ||
+          next === "FAILED_DELIVERY")
+      )
+        await tx.deliveryDriver.update({
+          where: { id: order.driverId },
+          data: { status: "AVAILABLE" },
+        });
+      if (next === "DELIVERED")
+        await tx.restaurantNotification.create({
+          data: {
+            restaurantId,
+            type: "DELIVERY_COMPLETED",
+            title: "Delivery completed",
+            href: `/order/${order.accessToken}`,
+          },
+        });
+      return true;
     });
+    if (changed)
+      await sendOrderStatusNotification({
+        orderId: order.id,
+        status: next,
+        orderNumber: order.orderNumber,
+        customerPhone: order.customerPhone,
+        restaurantName:
+          restaurant.locale === "ar" && restaurant.nameAr
+            ? restaurant.nameAr
+            : restaurant.name,
+        customerOrderUrl: publicOrderUrl(order.accessToken),
+        language: restaurant.locale === "ar" ? "ar" : "en",
+      });
     revalidatePath("/dashboard/orders");
-    if (accessToken) revalidatePath(`/order/${accessToken}`);
+    revalidatePath(`/order/${order.accessToken}`);
     redirect("/dashboard/orders?toast=orderStatusChanged");
   }
   const money = (value: number) =>
