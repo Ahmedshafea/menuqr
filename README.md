@@ -170,15 +170,19 @@ restaurant name, order number, and the secure review URL, in that order.
 
 The approved `new_restaurant_order_received` template receives six body variables in
 this exact order: order number, customer name, customer phone, formatted total,
-order type, and order time. Its first dynamic URL button receives the order ID
-as its URL suffix (for example,
-`https://menuqr-eg.vercel.app/dashboard/orders/{{1}}`).
+order type, and order time. Its first dynamic URL button receives the secure
+public order token as its URL suffix.
 
 The approved `order_received` customer template receives five body variables in
 this exact order: customer name, order number, restaurant name, restaurant
 phone, and formatted total. Its first dynamic URL button receives the secure
-public order token as its URL suffix (for example,
-`https://menuqr-eg.vercel.app/order/{{1}}`).
+public order token as its URL suffix.
+
+For both dynamic order buttons, enter only the static URL prefix
+`https://menuqr-eg.vercel.app/order/` in Meta's **Website URL** field. Meta
+renders the `{{1}}` suffix beside the field automatically; do not type
+`{{1}}` into the URL field itself. Otherwise the braces are URL-encoded and the
+result becomes `/order/%7B%7B1%7D%7D{token}` instead of `/order/{token}`.
 `WHATSAPP_APP_SECRET` verifies `X-Hub-Signature-256`; never expose either value
 to the browser. `OTP_HASH_SECRET` must be a random value of at least 32
 characters and can fall back to `AUTH_SECRET`.
