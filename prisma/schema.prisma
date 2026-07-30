@@ -461,8 +461,6 @@ model Setting {
   serviceFee                     Decimal    @default(0) @db.Decimal(10, 2)
   serviceFeeType                 String     @default("FIXED")
   taxType                        String     @default("PERCENTAGE")
-  discountValue                  Decimal    @default(0) @db.Decimal(10, 2)
-  discountType                   String     @default("FIXED")
   minimumOrder                   Decimal    @default(0) @db.Decimal(10, 2)
   allowOrdering                  Boolean    @default(true)
   allowOrdersOutsideHours        Boolean    @default(false)

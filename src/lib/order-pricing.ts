@@ -7,8 +7,6 @@ type PricingSettings = {
   serviceFeeType?: string;
   taxRate?: number;
   taxType?: string;
-  discountValue?: number;
-  discountType?: string;
 };
 
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
@@ -35,21 +33,11 @@ export function calculateOrderPricing(
   },
 ) {
   const safeSubtotal = money(subtotal);
-  const settingsDiscountAmount = Math.min(
-    safeSubtotal,
-    adjustment(
-      safeSubtotal,
-      Number(settings.discountValue ?? 0),
-      settings.discountType,
-    ),
-  );
   const promotionDiscountAmount = Math.min(
-    Math.max(0, safeSubtotal - settingsDiscountAmount),
+    safeSubtotal,
     money(Number(promotion?.discountAmount ?? 0)),
   );
-  const discountAmount = money(
-    settingsDiscountAmount + promotionDiscountAmount,
-  );
+  const discountAmount = promotionDiscountAmount;
   const discountedSubtotal = money(safeSubtotal - discountAmount);
   const deliveryFee =
     fulfillmentType === "DELIVERY" && !promotion?.freeDelivery
@@ -72,7 +60,6 @@ export function calculateOrderPricing(
   );
   return {
     subtotal: safeSubtotal,
-    settingsDiscountAmount,
     promotionDiscountAmount,
     discountedSubtotal,
     discountAmount,

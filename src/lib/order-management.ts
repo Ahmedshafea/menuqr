@@ -63,11 +63,12 @@ export async function recalculateOrder(
               serviceFeeType: true,
               taxRate: true,
               taxType: true,
-              discountValue: true,
-              discountType: true,
             },
           },
         },
+      },
+      promotionOrders: {
+        select: { discountAmount: true, promotionType: true },
       },
       items: {
         select: { unitPrice: true, quantity: true, isComplimentary: true },
@@ -89,13 +90,30 @@ export async function recalculateOrder(
           deliveryFee: Number(order.restaurant.settings.deliveryFee),
           serviceFee: Number(order.restaurant.settings.serviceFee),
           taxRate: Number(order.restaurant.settings.taxRate),
-          discountValue: Number(order.restaurant.settings.discountValue),
         }
       : {},
+    {
+      discountAmount: order.promotionOrders.reduce(
+        (sum, promotion) => sum + Number(promotion.discountAmount),
+        0,
+      ),
+      freeDelivery: order.promotionOrders.some(
+        (promotion) => promotion.promotionType === "FREE_DELIVERY",
+      ),
+    },
   );
   await tx.order.update({
     where: { id: orderId },
-    data: pricing,
+    data: {
+      subtotal: pricing.subtotal,
+      originalSubtotal: pricing.subtotal,
+      finalSubtotal: pricing.discountedSubtotal,
+      discountAmount: pricing.discountAmount,
+      deliveryFee: pricing.deliveryFee,
+      serviceFee: pricing.serviceFee,
+      taxAmount: pricing.taxAmount,
+      total: pricing.total,
+    },
   });
   return pricing.total;
 }
