@@ -86,6 +86,23 @@ export async function POST(request: Request) {
             create: { userId: user.id, role: "RESTAURANT_OWNER" },
           },
           settings: { create: {} },
+          branches: {
+            create: {
+              name: data.restaurantName,
+              slug: "main",
+              address: "",
+              phone,
+              useRestaurantWhatsapp: true,
+              workingHours: {
+                create: Array.from({ length: 7 }, (_, dayOfWeek) => ({
+                  dayOfWeek,
+                  opensAt: "00:00",
+                  closesAt: "23:59",
+                  isClosed: false,
+                })),
+              },
+            },
+          },
         },
       });
       return user;

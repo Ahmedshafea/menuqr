@@ -318,6 +318,7 @@ interface SendOrderCreatedNotificationsInput {
   orderNumber: string;
   restaurantName: string;
   restaurantPhone: string;
+  restaurantRecipientPhone?: string;
   customerName: string;
   customerPhone: string;
   total: string | number;
@@ -372,7 +373,7 @@ export async function sendOrderCreatedNotifications(
       ],
     }),
     sendTemplate({
-      to: input.restaurantPhone,
+      to: input.restaurantRecipientPhone || input.restaurantPhone,
       templateName: RESTAURANT_TEMPLATES.new_order,
       language,
       notificationType: "new_order",

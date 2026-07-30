@@ -39,6 +39,10 @@ export async function POST(request: Request) {
             taxType: true,
           },
         },
+        branches: {
+          where: { isActive: true },
+          select: { id: true },
+        },
         products: {
           where: { id: { in: input.items.map((item) => item.productId) } },
           select: { id: true, categoryId: true, price: true },
@@ -47,6 +51,11 @@ export async function POST(request: Request) {
     }),
   ]);
   if (!restaurant) return apiError("RESTAURANT_UNAVAILABLE", 404);
+  if (
+    input.branchId &&
+    !restaurant.branches.some((branch) => branch.id === input.branchId)
+  )
+    return apiError("BRANCH_UNAVAILABLE", 409);
   const productMap = new Map(restaurant.products.map((product) => [product.id, product]));
   if (input.items.some((item) => !productMap.has(item.productId)))
     return apiError("PRODUCT_UNAVAILABLE", 409);

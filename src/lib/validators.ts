@@ -29,6 +29,7 @@ const optionalAddressText = (maximum = 120) =>
 
 export const checkoutSchema = z.object({
   restaurantSlug: z.string(),
+  branchId: z.string().optional(),
   customerName: z.string().trim().min(2).max(80),
   customerPhone: z.string().trim().min(8).max(20),
   fulfillmentType: z.enum(["DELIVERY", "PICKUP", "DINE_IN"]).optional().default("DELIVERY"),

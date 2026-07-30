@@ -12,5 +12,8 @@
   "orderStatusChanged": "تم تحديث حالة الطلب.",
   "orderUpdated": "تم تحديث الطلب وإعادة حساب الإجمالي.",
   "profileUpdated": "تم تحديث الملف الشخصي.",
-  "imageUploaded": "تم رفع الصورة بنجاح."
+  "imageUploaded": "تم رفع الصورة بنجاح.",
+  "branchCreated": "تم إنشاء الفرع بنجاح.",
+  "branchUpdated": "تم تحديث الفرع بنجاح.",
+  "branchDeleted": "تم حذف الفرع بنجاح."
 }

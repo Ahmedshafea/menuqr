@@ -8,36 +8,43 @@ import {
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; branchSlug: string }>;
 }): Promise<Metadata> {
+  const { slug, branchSlug } = await params;
   const [restaurant, locale] = await Promise.all([
-    getRestaurant((await params).slug),
+    getRestaurant(slug),
     getLocale(),
   ]);
   if (!restaurant) return {};
+  const branch = restaurant.branches.find(
+    (item) => "slug" in item && item.slug === branchSlug,
+  );
+  const restaurantName =
+    locale === "ar" && restaurant.nameAr ? restaurant.nameAr : restaurant.name;
   return {
-    title: `${locale === "ar" && restaurant.nameAr ? restaurant.nameAr : restaurant.name} | MenuQR`,
+    title: `${branch && "name" in branch ? branch.name : branchSlug} — ${restaurantName} | MenuQR`,
     description:
       locale === "ar"
         ? (restaurant.descriptionAr ?? restaurant.description ?? undefined)
         : (restaurant.description ?? undefined),
-    openGraph: { images: restaurant.coverUrl ? [restaurant.coverUrl] : [] },
   };
 }
 
-export default async function MenuPage({
+export default async function BranchMenuPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; branchSlug: string }>;
   searchParams: Promise<{
     reorder?: string;
     extras?: string;
     checkout?: string;
   }>;
 }) {
+  const { slug, branchSlug } = await params;
   return renderMenuPage({
-    restaurantSlug: (await params).slug,
+    restaurantSlug: slug,
+    branchSlug,
     searchParams,
   });
 }

@@ -183,20 +183,33 @@ model Restaurant {
 }
 
 model Branch {
-  id                String            @id @default(cuid())
-  name              String
-  address           String
-  mapUrl            String?
-  phone             String?
-  isActive          Boolean           @default(true)
-  restaurantId      String
-  createdAt         DateTime          @default(now())
-  restaurant        Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  orders            Order[]
-  workingHours      WorkingHour[]
-  promotionBranches PromotionBranch[]
+  id                    String            @id @default(cuid())
+  name                  String
+  slug                  String
+  phone                 String?
+  whatsappNumber        String?
+  useRestaurantWhatsapp Boolean           @default(true)
+  email                 String?
+  address               String
+  city                  String?
+  state                 String?
+  country               String?
+  postalCode            String?
+  latitude              Decimal?          @db.Decimal(10, 7)
+  longitude             Decimal?          @db.Decimal(10, 7)
+  googleMapsUrl         String?
+  isActive              Boolean           @default(true)
+  restaurantId          String
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders                Order[]
+  workingHours          WorkingHour[]
+  promotionBranches     PromotionBranch[]
 
+  @@unique([restaurantId, slug])
   @@index([restaurantId, isActive])
+  @@index([restaurantId, updatedAt])
 }
 
 model WorkingHour {
@@ -319,7 +332,7 @@ model Order {
   updatedAt          DateTime             @updatedAt
   accessToken        String               @unique
   customerUserId     String?
-  branch             Branch?              @relation(fields: [branchId], references: [id])
+  branch             Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
   customer           User?                @relation("CustomerOrders", fields: [customerUserId], references: [id], map: "Order_customerId_fkey")
   restaurant         Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   items              OrderItem[]
@@ -344,6 +357,7 @@ model Order {
   @@index([customerUserId, createdAt])
   @@index([restaurantId, status, createdAt])
   @@index([restaurantId, fulfillmentType, createdAt])
+  @@index([branchId, createdAt])
   @@index([driverId, status])
 }
 
