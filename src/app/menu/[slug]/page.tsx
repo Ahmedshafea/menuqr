@@ -33,7 +33,15 @@ const getDatabaseRestaurant = unstable_cache(
           },
           orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
         },
-        reviews:{where:{status:"PUBLISHED"},orderBy:{publishedAt:"desc"},take:5,select:{id:true,overall:true,comment:true,customerName:true,isVerified:true,ownerReply:true,createdAt:true,order:{select:{customerName:true}}}},
+        reviews:{
+          where:{
+            status:"PUBLISHED",
+            AND:[{comment:{not:null}},{comment:{not:""}}],
+          },
+          orderBy:{publishedAt:"desc"},
+          take:5,
+          select:{id:true,overall:true,comment:true,customerName:true,isVerified:true,ownerReply:true,createdAt:true,order:{select:{customerName:true}}},
+        },
       },
     });
     if (!restaurant) return null;
@@ -47,7 +55,7 @@ const getDatabaseRestaurant = unstable_cache(
       rating: { average: rating._avg.overall ?? 0, count: rating._count._all },
     };
   },
-  ["public-menu"],
+  ["public-menu-with-comment-reviews"],
   { revalidate: 60, tags: ["public-menu"] },
 );
 async function getRestaurant(slug: string) {
@@ -139,6 +147,12 @@ export default async function MenuPage({
   const customerDefaults = !isDemo && session?.user.roles.includes("CUSTOMER") ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, phone: true, customerProfile: { select: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }], select: { id: true, title: true, address: true, latitude: true, longitude: true, isDefault: true } } } } } }) : null;
   const address = restaurant.address || branch?.address;
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}`;
+  const visibleReviews =
+    "reviews" in restaurant
+      ? restaurant.reviews
+          .filter((review) => Boolean(review.comment?.trim()))
+          .slice(0, 5)
+      : [];
   return (
     <main className="public-menu">
       <header
@@ -267,7 +281,7 @@ export default async function MenuPage({
             </div>
           </aside>
         )}
-        {"reviews" in restaurant && restaurant.reviews.length > 0 && (
+        {visibleReviews.length > 0 && (
           <section className="public-reviews wall-of-love">
             <header>
               <div>
@@ -279,10 +293,10 @@ export default async function MenuPage({
               </a>
             </header>
             <div>
-              {restaurant.reviews.map((review) => (
+              {visibleReviews.map((review) => (
                 <article key={review.id}>
                   <b>{"★".repeat(review.overall)}</b>
-                  <p>{review.comment || "—"}</p>
+                  <p>{review.comment}</p>
                   <small>
                     {review.customerName ||
                       review.order?.customerName ||

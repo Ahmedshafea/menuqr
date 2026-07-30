@@ -409,7 +409,9 @@ export async function sendOrderCreatedNotifications(
           type: "button",
           sub_type: "url",
           index: "0",
-          parameters: [{ type: "text", text: input.orderId }],
+          parameters: [
+            { type: "text", text: lastUrlSegment(input.restaurantOrderUrl) },
+          ],
         },
       ],
     }),

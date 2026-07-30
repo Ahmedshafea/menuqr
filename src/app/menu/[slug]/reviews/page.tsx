@@ -68,6 +68,7 @@ export default async function Reviews({
   const where = {
     restaurantId: restaurant.id,
     status: "PUBLISHED" as const,
+    AND: [{ comment: { not: null } }, { comment: { not: "" } }],
     ...(query.images === "1" ? { images: { some: {} } } : {}),
     ...(query.q
       ? {
@@ -78,7 +79,7 @@ export default async function Reviews({
         }
       : {}),
   };
-  const [reviews, aggregate, distribution, total] = await Promise.all([
+  const [reviewRows, aggregate, distribution, total] = await Promise.all([
     prisma.restaurantReview.findMany({
       where,
       orderBy:
@@ -123,6 +124,7 @@ export default async function Reviews({
   const counts = new Map(
     distribution.map((item) => [item.overall, item._count._all]),
   );
+  const reviews = reviewRows.filter((review) => Boolean(review.comment?.trim()));
   const schema = {
     "@context": "https://schema.org",
     "@type": "Restaurant",
