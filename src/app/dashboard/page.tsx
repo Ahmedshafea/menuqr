@@ -20,8 +20,8 @@ export default async function Dashboard() {
     { label: t("qrScans"), value: data.qrScans, icon: QrCode }, { label: t("menuViews"), value: data.menuViews, icon: Eye },
   ];
   const checklist = [
-    { key: "restaurant", done: Boolean(data.restaurant.description || data.restaurant.descriptionAr || data.restaurant.address), href: "/dashboard/profile" },
-    { key: "logo", done: Boolean(data.restaurant.logoUrl), href: "/dashboard/profile" },
+    { key: "restaurant", done: Boolean(data.restaurant.description || data.restaurant.descriptionAr || data.restaurant.address), href: "/dashboard/settings" },
+    { key: "logo", done: Boolean(data.restaurant.logoUrl), href: "/dashboard/settings" },
     { key: "category", done: data.categories > 0, href: "/dashboard/menu" },
     { key: "product", done: data.totalProducts > 0, href: "/dashboard/menu" },
     { key: "whatsapp", done: Boolean(data.restaurant.whatsapp), href: "/dashboard/settings" },

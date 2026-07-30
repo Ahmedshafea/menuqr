@@ -173,7 +173,6 @@ export default async function SettingsPage() {
       });
     });
     revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/profile");
     revalidatePath("/menu", "layout");
     revalidateTag("public-menu");
     redirect("/dashboard/settings?toast=settingsUpdated");
