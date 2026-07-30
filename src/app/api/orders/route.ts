@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/validators";
 import { publicOrderUrl, whatsappUrl } from "@/lib/utils";
@@ -12,6 +13,12 @@ import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { isDemoSlug } from "@/lib/demo-restaurants";
 import { calculateOrderPricing } from "@/lib/order-pricing";
 import { sendOrderCreatedNotifications } from "@/lib/whatsapp";
+import { calculatePromotions } from "@/lib/promotion-engine";
+import {
+  getPromotionCandidates,
+  promotionCustomerKey,
+  recordPromotionUsage,
+} from "@/lib/promotions";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -42,6 +49,7 @@ export async function POST(request: Request) {
       branches: {
         where: { isActive: true },
         select: {
+          id: true,
           workingHours: {
             select: {
               dayOfWeek: true,
@@ -60,6 +68,7 @@ export async function POST(request: Request) {
         },
         select: {
           id: true,
+          categoryId: true,
           name: true,
           nameAr: true,
           price: true,
@@ -145,13 +154,44 @@ export async function POST(request: Request) {
     };
   });
   if(invalidOptionSelection)return apiError("INVALID_OPTION_SELECTION",409);
+  const customerKey = promotionCustomerKey(data.customerPhone);
+  const [promotionCandidates, customerOrderCount] = await Promise.all([
+    getPromotionCandidates({
+      restaurantId: restaurant.id,
+      customerUserId: session?.user.id,
+      customerKey,
+    }),
+    prisma.order.count({
+      where: session?.user.id
+        ? { restaurantId: restaurant.id, customerUserId: session.user.id }
+        : {
+            restaurantId: restaurant.id,
+            customerPhone: { endsWith: customerKey },
+          },
+    }),
+  ]);
+  const promotionCalculation = calculatePromotions(promotionCandidates, {
+    subtotal: total,
+    lines: verified.map((value) => ({
+      productId: value.product.id,
+      categoryId: value.product.categoryId,
+      unitPrice: value.unit,
+      quantity: value.item.quantity,
+    })),
+    fulfillmentType: data.fulfillmentType,
+    branchId: restaurant.branches[0]?.id,
+    customerOrderCount,
+    couponCode: data.couponCode,
+  });
+  if (data.couponCode && promotionCalculation.couponError)
+    return apiError(promotionCalculation.couponError, 409);
   const pricing = calculateOrderPricing(total, data.fulfillmentType, restaurant.settings ? {
     ...restaurant.settings,
     deliveryFee: Number(restaurant.settings.deliveryFee),
     serviceFee: Number(restaurant.settings.serviceFee),
     taxRate: Number(restaurant.settings.taxRate),
     discountValue: Number(restaurant.settings.discountValue),
-  } : {});
+  } : {}, promotionCalculation);
   const number = `MQ-${Date.now().toString(36).toUpperCase()}`;
   // 72 bits of cryptographic entropy keeps public order links unguessable while
   // producing a clean 12-character code that is easier to share on WhatsApp.
@@ -160,7 +200,9 @@ export async function POST(request: Request) {
     const existingAccount = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true } });
     if (existingAccount) return apiError("ACCOUNT_EXISTS", 409);
   }
-  const order = await prisma.$transaction(async (transaction) => {
+  let order;
+  try {
+    order = await prisma.$transaction(async (transaction) => {
     let customerUserId = session?.user.id ?? null;
     if (customerUserId) {
       await transaction.userRole.upsert({
@@ -209,6 +251,9 @@ export async function POST(request: Request) {
         deliveryNotes: data.deliveryNotes,
         notes: data.notes,
         subtotal: pricing.subtotal,
+        originalSubtotal: pricing.subtotal,
+        finalSubtotal: pricing.discountedSubtotal,
+        couponCode: promotionCalculation.couponCode,
         discountAmount: pricing.discountAmount,
         deliveryFee: pricing.deliveryFee,
         serviceFee: pricing.serviceFee,
@@ -244,6 +289,14 @@ export async function POST(request: Request) {
       href: `/order/${accessToken}`,
       dedupeKey: `order:${created.id}`,
     });
+    await recordPromotionUsage(transaction, {
+      restaurantId: restaurant.id,
+      orderId: created.id,
+      customerUserId,
+      customerKey,
+      couponCode: promotionCalculation.couponCode,
+      appliedPromotions: promotionCalculation.appliedPromotions,
+    });
     if (customerUserId)
       await createRestaurantNotification(transaction, {
         restaurantId: restaurant.id,
@@ -271,7 +324,27 @@ export async function POST(request: Request) {
           });
       }
     return created;
-  });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (
+      (error instanceof Error &&
+        ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT"].includes(
+          error.message,
+        )) ||
+      (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2034")
+    )
+      return apiError(
+        error instanceof Error &&
+          ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT"].includes(
+            error.message,
+          )
+          ? error.message
+          : "ORDER_CONFLICT_RETRY",
+        409,
+      );
+    throw error;
+  }
   const restaurantName =
     arabic && restaurant.nameAr ? restaurant.nameAr : restaurant.name;
   const trackingUrl = publicOrderUrl(accessToken, request.url);
@@ -302,6 +375,7 @@ export async function POST(request: Request) {
     }).format(order.createdAt);
     await sendOrderCreatedNotifications({
       orderId: order.id,
+      orderAccessToken: accessToken,
       orderNumber: number,
       restaurantName,
       restaurantPhone: restaurant.whatsapp,
@@ -310,11 +384,6 @@ export async function POST(request: Request) {
       total: formattedTotal,
       orderType,
       orderTime,
-      customerOrderUrl: trackingUrl,
-      // `/order/[accessToken]` is the existing secure order workspace. It is
-      // public for the customer and reveals management controls only to an
-      // authenticated restaurant member.
-      restaurantOrderUrl: trackingUrl,
       language: arabic ? "ar" : "en",
     });
   } catch (error) {

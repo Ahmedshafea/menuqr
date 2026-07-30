@@ -32,6 +32,7 @@ model User {
   restaurantMemberships RestaurantMember[]
   roles                 UserRole[]
   verificationTokens    VerificationToken[]
+  promotionUsages       PromotionUsage[]
 }
 
 model UserRole {
@@ -176,20 +177,24 @@ model Restaurant {
   reviews           RestaurantReview[]
   latitude          Decimal?                     @db.Decimal(10, 7)
   longitude         Decimal?                     @db.Decimal(10, 7)
+  promotions        Promotion[]
+  coupons           Coupon[]
+  promotionUsages   PromotionUsage[]
 }
 
 model Branch {
-  id           String        @id @default(cuid())
-  name         String
-  address      String
-  mapUrl       String?
-  phone        String?
-  isActive     Boolean       @default(true)
-  restaurantId String
-  createdAt    DateTime      @default(now())
-  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  orders       Order[]
-  workingHours WorkingHour[]
+  id                String            @id @default(cuid())
+  name              String
+  address           String
+  mapUrl            String?
+  phone             String?
+  isActive          Boolean           @default(true)
+  restaurantId      String
+  createdAt         DateTime          @default(now())
+  restaurant        Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders            Order[]
+  workingHours      WorkingHour[]
+  promotionBranches PromotionBranch[]
 
   @@index([restaurantId, isActive])
 }
@@ -207,45 +212,48 @@ model WorkingHour {
 }
 
 model Category {
-  id           String     @id @default(cuid())
-  name         String
-  nameAr       String?
-  description  String?
-  sortOrder    Int        @default(0)
-  isActive     Boolean    @default(true)
-  restaurantId String
-  createdAt    DateTime   @default(now())
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  products     Product[]
+  id                  String              @id @default(cuid())
+  name                String
+  nameAr              String?
+  description         String?
+  sortOrder           Int                 @default(0)
+  isActive            Boolean             @default(true)
+  restaurantId        String
+  createdAt           DateTime            @default(now())
+  restaurant          Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  products            Product[]
+  promotionCategories PromotionCategory[]
 
   @@index([restaurantId, sortOrder])
 }
 
 model Product {
-  id                String                      @id @default(cuid())
-  name              String
-  nameAr            String?
-  description       String?
-  descriptionAr     String?
-  price             Decimal                     @db.Decimal(10, 2)
-  isAvailable       Boolean                     @default(true)
-  availability      ProductAvailability         @default(AVAILABLE)
-  isFeatured        Boolean                     @default(false)
-  sortOrder         Int                         @default(0)
-  restaurantId      String
-  categoryId        String
-  createdAt         DateTime                    @default(now())
-  updatedAt         DateTime                    @updatedAt
-  stock             Int?
-  lowStockThreshold Int?
-  customerFavorites CustomerFavoriteProduct[]
-  extras            Extra[]
-  orderItems        OrderItem[]
-  category          Category                    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  restaurant        Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  images            ProductImage[]
-  optionGroups      ProductOptionGroupProduct[]
-  standaloneOptions ProductOption[]             @relation("StandaloneOptionProduct")
+  id                 String                      @id @default(cuid())
+  name               String
+  nameAr             String?
+  description        String?
+  descriptionAr      String?
+  price              Decimal                     @db.Decimal(10, 2)
+  isAvailable        Boolean                     @default(true)
+  availability       ProductAvailability         @default(AVAILABLE)
+  isFeatured         Boolean                     @default(false)
+  sortOrder          Int                         @default(0)
+  restaurantId       String
+  categoryId         String
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  stock              Int?
+  lowStockThreshold  Int?
+  customerFavorites  CustomerFavoriteProduct[]
+  extras             Extra[]
+  orderItems         OrderItem[]
+  category           Category                    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  restaurant         Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  images             ProductImage[]
+  optionGroups       ProductOptionGroupProduct[]
+  standaloneOptions  ProductOption[]             @relation("StandaloneOptionProduct")
+  promotionProducts  PromotionProduct[]
+  freeItemPromotions Promotion[]                 @relation("PromotionFreeProduct")
 
   @@index([restaurantId, categoryId])
   @@index([categoryId, sortOrder])
@@ -326,6 +334,11 @@ model Order {
   deliveredAt        DateTime?
   estimatedArrivalAt DateTime?
   review             RestaurantReview?
+  promotionOrders    PromotionOrder[]
+  promotionUsages    PromotionUsage[]
+  couponCode         String?
+  originalSubtotal   Decimal              @default(0) @db.Decimal(10, 2)
+  finalSubtotal      Decimal              @default(0) @db.Decimal(10, 2)
 
   @@index([restaurantId, createdAt])
   @@index([customerUserId, createdAt])
@@ -441,31 +454,179 @@ model Payment {
 }
 
 model Setting {
-  id                       String     @id @default(cuid())
-  taxRate                  Decimal    @default(0) @db.Decimal(5, 2)
-  deliveryFee              Decimal    @default(0) @db.Decimal(10, 2)
-  deliveryFeeType          String     @default("FIXED")
-  serviceFee               Decimal    @default(0) @db.Decimal(10, 2)
-  serviceFeeType           String     @default("FIXED")
-  taxType                  String     @default("PERCENTAGE")
-  discountValue            Decimal    @default(0) @db.Decimal(10, 2)
-  discountType             String     @default("FIXED")
-  minimumOrder             Decimal    @default(0) @db.Decimal(10, 2)
-  allowOrdering            Boolean    @default(true)
-  allowOrdersOutsideHours  Boolean    @default(false)
-  inventoryTrackingEnabled Boolean    @default(false)
-  setupChecklistDismissed  Boolean    @default(false)
-  offersDelivery           Boolean    @default(true)
-  offersPickup             Boolean    @default(true)
-  offersDineIn             Boolean    @default(false)
-  restaurantId             String     @unique
-  estimatedOrderMinutes    Int        @default(30)
-  reviewsEnabled           Boolean    @default(true)
-  reviewImagesEnabled      Boolean    @default(true)
-  anonymousReviewsEnabled  Boolean    @default(true)
-  requireCompletedOrderForReview Boolean @default(false)
-  autoPublishReviews       Boolean    @default(false)
-  restaurant               Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id                             String     @id @default(cuid())
+  taxRate                        Decimal    @default(0) @db.Decimal(5, 2)
+  deliveryFee                    Decimal    @default(0) @db.Decimal(10, 2)
+  deliveryFeeType                String     @default("FIXED")
+  serviceFee                     Decimal    @default(0) @db.Decimal(10, 2)
+  serviceFeeType                 String     @default("FIXED")
+  taxType                        String     @default("PERCENTAGE")
+  discountValue                  Decimal    @default(0) @db.Decimal(10, 2)
+  discountType                   String     @default("FIXED")
+  minimumOrder                   Decimal    @default(0) @db.Decimal(10, 2)
+  allowOrdering                  Boolean    @default(true)
+  allowOrdersOutsideHours        Boolean    @default(false)
+  inventoryTrackingEnabled       Boolean    @default(false)
+  setupChecklistDismissed        Boolean    @default(false)
+  offersDelivery                 Boolean    @default(true)
+  offersPickup                   Boolean    @default(true)
+  offersDineIn                   Boolean    @default(false)
+  restaurantId                   String     @unique
+  estimatedOrderMinutes          Int        @default(30)
+  reviewsEnabled                 Boolean    @default(true)
+  reviewImagesEnabled            Boolean    @default(true)
+  anonymousReviewsEnabled        Boolean    @default(true)
+  requireCompletedOrderForReview Boolean    @default(false)
+  autoPublishReviews             Boolean    @default(false)
+  restaurant                     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+model Promotion {
+  id                String                @id @default(cuid())
+  restaurantId      String
+  name              String
+  nameAr            String?
+  description       String?
+  descriptionAr     String?
+  type              PromotionType
+  targetType        PromotionTargetType   @default(ORDER)
+  value             Decimal               @default(0) @db.Decimal(10, 2)
+  buyQuantity       Int?
+  getQuantity       Int?
+  freeProductId     String?
+  minimumOrderValue Decimal?              @db.Decimal(10, 2)
+  maximumDiscount   Decimal?              @db.Decimal(10, 2)
+  minimumQuantity   Int?
+  startsAt          DateTime?
+  endsAt            DateTime?
+  startTime         String?
+  endTime           String?
+  weekdays          Int[]                 @default([])
+  firstOrderOnly    Boolean               @default(false)
+  newCustomersOnly  Boolean               @default(false)
+  returningOnly     Boolean               @default(false)
+  totalUsageLimit   Int?
+  perCustomerLimit  Int?
+  usageCount        Int                   @default(0)
+  requiresCoupon    Boolean               @default(false)
+  autoApply         Boolean               @default(true)
+  allowStacking     Boolean               @default(false)
+  stackingRule      PromotionStackingRule @default(HIGHEST_WINS)
+  priority          Int                   @default(0)
+  exclusive         Boolean               @default(false)
+  isActive          Boolean               @default(true)
+  status            PromotionStatus       @default(DRAFT)
+  archivedAt        DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  restaurant        Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  freeProduct       Product?              @relation("PromotionFreeProduct", fields: [freeProductId], references: [id], onDelete: SetNull)
+  products          PromotionProduct[]
+  categories        PromotionCategory[]
+  branches          PromotionBranch[]
+  coupons           Coupon[]
+  usages            PromotionUsage[]
+  orders            PromotionOrder[]
+
+  @@index([restaurantId, status, isActive])
+  @@index([restaurantId, startsAt, endsAt])
+  @@index([restaurantId, priority])
+}
+
+model PromotionProduct {
+  promotionId String
+  productId   String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, productId])
+  @@index([productId])
+}
+
+model PromotionCategory {
+  promotionId String
+  categoryId  String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, categoryId])
+  @@index([categoryId])
+}
+
+model PromotionBranch {
+  promotionId String
+  branchId    String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, branchId])
+  @@index([branchId])
+}
+
+model Coupon {
+  id               String           @id @default(cuid())
+  restaurantId     String
+  promotionId      String
+  code             String
+  description      String?
+  maximumUsage     Int?
+  perCustomerLimit Int?
+  usageCount       Int              @default(0)
+  expiresAt        DateTime?
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  restaurant       Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  promotion        Promotion        @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  usages           PromotionUsage[]
+  orders           PromotionOrder[]
+
+  @@unique([restaurantId, code])
+  @@index([restaurantId, isActive, expiresAt])
+  @@index([promotionId])
+}
+
+model PromotionUsage {
+  id             String     @id @default(cuid())
+  restaurantId   String
+  promotionId    String
+  couponId       String?
+  orderId        String
+  customerUserId String?
+  customerKey    String?
+  discountAmount Decimal    @db.Decimal(10, 2)
+  createdAt      DateTime   @default(now())
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  promotion      Promotion  @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  coupon         Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  order          Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer       User?      @relation(fields: [customerUserId], references: [id], onDelete: SetNull)
+
+  @@unique([promotionId, orderId])
+  @@index([restaurantId, createdAt])
+  @@index([promotionId, customerUserId])
+  @@index([promotionId, customerKey])
+  @@index([couponId, createdAt])
+}
+
+model PromotionOrder {
+  id             String        @id @default(cuid())
+  orderId        String
+  promotionId    String?
+  couponId       String?
+  promotionName  String
+  promotionType  PromotionType
+  discountAmount Decimal       @db.Decimal(10, 2)
+  snapshot       Json
+  createdAt      DateTime      @default(now())
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  promotion      Promotion?    @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  coupon         Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, promotionId])
+  @@index([orderId])
+  @@index([promotionId, createdAt])
+  @@index([couponId, createdAt])
 }
 
 model ProductOptionGroup {
@@ -563,29 +724,29 @@ model DeliveryDriver {
 }
 
 model RestaurantReview {
-  id             String       @id @default(cuid())
-  restaurantId   String
-  orderId        String?      @unique
-  customerUserId String?
-  customerName   String?
-  foodQuality    Int
-  deliverySpeed  Int
-  packaging      Int
-  staffBehavior  Int          @default(5)
-  overall        Int
-  comment        String?
-  ownerReply     String?
-  repliedAt      DateTime?
+  id              String                  @id @default(cuid())
+  restaurantId    String
+  orderId         String?                 @unique
+  customerUserId  String?
+  customerName    String?
+  foodQuality     Int
+  deliverySpeed   Int
+  packaging       Int
+  staffBehavior   Int                     @default(5)
+  overall         Int
+  comment         String?
+  ownerReply      String?
+  repliedAt       DateTime?
   abuseReportedAt DateTime?
-  ipHash         String?
-  isVerified     Boolean      @default(false)
-  status         ReviewStatus @default(PENDING)
-  publishedAt    DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  restaurant     Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  order          Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  images         RestaurantReviewImage[]
+  ipHash          String?
+  isVerified      Boolean                 @default(false)
+  status          ReviewStatus            @default(PENDING)
+  publishedAt     DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  restaurant      Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order           Order?                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  images          RestaurantReviewImage[]
 
   @@index([restaurantId, status, createdAt])
   @@index([restaurantId, overall])
@@ -768,4 +929,34 @@ enum PaymentStatus {
 enum BillingInterval {
   MONTHLY
   YEARLY
+}
+
+enum PromotionType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  BUY_X_GET_Y
+  FREE_ITEM
+  FREE_DELIVERY
+}
+
+enum PromotionTargetType {
+  ORDER
+  PRODUCT
+  CATEGORY
+  BRANCH
+  RESTAURANT
+  COLLECTION
+}
+
+enum PromotionStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum PromotionStackingRule {
+  ALLOW
+  PREVENT
+  HIGHEST_WINS
 }

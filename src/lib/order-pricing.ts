@@ -29,9 +29,13 @@ export function calculateOrderPricing(
   subtotal: number,
   fulfillmentType: "DELIVERY" | "PICKUP" | "DINE_IN",
   settings: PricingSettings,
+  promotion?: {
+    discountAmount?: number;
+    freeDelivery?: boolean;
+  },
 ) {
   const safeSubtotal = money(subtotal);
-  const discountAmount = Math.min(
+  const settingsDiscountAmount = Math.min(
     safeSubtotal,
     adjustment(
       safeSubtotal,
@@ -39,9 +43,16 @@ export function calculateOrderPricing(
       settings.discountType,
     ),
   );
+  const promotionDiscountAmount = Math.min(
+    Math.max(0, safeSubtotal - settingsDiscountAmount),
+    money(Number(promotion?.discountAmount ?? 0)),
+  );
+  const discountAmount = money(
+    settingsDiscountAmount + promotionDiscountAmount,
+  );
   const discountedSubtotal = money(safeSubtotal - discountAmount);
   const deliveryFee =
-    fulfillmentType === "DELIVERY"
+    fulfillmentType === "DELIVERY" && !promotion?.freeDelivery
       ? adjustment(
           discountedSubtotal,
           Number(settings.deliveryFee ?? 0),
@@ -61,6 +72,9 @@ export function calculateOrderPricing(
   );
   return {
     subtotal: safeSubtotal,
+    settingsDiscountAmount,
+    promotionDiscountAmount,
+    discountedSubtotal,
     discountAmount,
     deliveryFee,
     serviceFee,

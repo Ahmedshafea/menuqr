@@ -134,7 +134,7 @@ WHATSAPP_TEMPLATE_OTP_AR=
 WHATSAPP_TEMPLATE_OTP_EN=
 WHATSAPP_TEMPLATE_OTP_LANGUAGE_AR=ar_EG
 WHATSAPP_TEMPLATE_OTP_LANGUAGE_EN=en
-WHATSAPP_TEMPLATE_ORDER_RECEIVED=order_received
+WHATSAPP_TEMPLATE_ORDER_RECEIVED=customer_order_received
 WHATSAPP_TEMPLATE_ORDER_ACCEPTED=order_accepted
 WHATSAPP_TEMPLATE_ORDER_PREPARING=order_preparing
 WHATSAPP_TEMPLATE_ORDER_READY=order_ready
@@ -173,7 +173,7 @@ this exact order: order number, customer name, customer phone, formatted total,
 order type, and order time. Its first dynamic URL button receives the secure
 public order token as its URL suffix.
 
-The approved `order_received` customer template receives five body variables in
+The approved `customer_order_received` customer template receives five body variables in
 this exact order: customer name, order number, restaurant name, restaurant
 phone, and formatted total. Its first dynamic URL button receives the secure
 public order token as its URL suffix.
@@ -215,3 +215,41 @@ For local webhook testing, expose localhost with a temporary HTTPS tunnel and
 configure that URL in Meta. Never disable signature verification; use a separate
 Meta test app/number and test recipient instead. OTP values, access tokens and
 phone numbers are intentionally excluded from structured logs.
+
+## Promotions and coupons
+
+Restaurant owners manage offers from `/dashboard/promotions`. The module
+supports percentage and fixed discounts, buy-X-get-Y, free items, free
+delivery, automatic campaigns, and coupon-gated campaigns. Promotions can be
+scheduled by date, time, and weekday and targeted to the restaurant, order,
+branch, category, or product.
+
+Pricing is calculated only by the shared server engine in
+`src/lib/promotion-engine.ts`. The public menu uses
+`POST /api/promotions/calculate` for previews, while `POST /api/orders`
+recalculates eligibility from database prices before creating the order.
+Browser-supplied totals and discounts are never trusted. Promotion redemption,
+coupon counters, order creation, and immutable promotion snapshots are written
+in one serializable transaction; concurrent limit conflicts return HTTP 409
+without creating a partial order.
+
+Promotion endpoints:
+
+- `GET|POST /api/promotions` — paginated tenant list and creation
+- `GET|PATCH|DELETE /api/promotions/:id` — tenant-scoped management
+- `POST /api/promotions/:id/duplicate` — duplicate a campaign
+- `POST /api/promotions/calculate` — rate-limited public price calculation
+- `GET /api/promotions/analytics` — tenant-scoped performance aggregates
+
+Deploy the normalized promotion tables and order snapshot columns before
+enabling the feature:
+
+```bash
+npm run db:generate
+npm run db:deploy
+```
+
+Existing restaurants and orders remain compatible: with no active promotions,
+the shared pricing result is unchanged. Automated tests for coupon validation,
+discount types, scheduling, limits, priority, and stacking live in
+`src/lib/promotion-engine.test.ts`.

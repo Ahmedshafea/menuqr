@@ -24,7 +24,9 @@ function metaTemplateLanguage(language: string) {
 }
 
 const CUSTOMER_TEMPLATES: Record<CustomerNotificationType, string> = {
-  order_received: environmentValue("WHATSAPP_TEMPLATE_ORDER_RECEIVED") || "order_received",
+  order_received:
+    environmentValue("WHATSAPP_TEMPLATE_ORDER_RECEIVED") ||
+    "customer_order_received",
   order_accepted: environmentValue("WHATSAPP_TEMPLATE_ORDER_ACCEPTED") || "order_accepted",
   order_preparing: environmentValue("WHATSAPP_TEMPLATE_ORDER_PREPARING") || "order_preparing",
   order_ready: environmentValue("WHATSAPP_TEMPLATE_ORDER_READY") || "order_ready",
@@ -246,19 +248,6 @@ function bodyComponent(variables: TemplateVariable[]): WhatsAppTemplateComponent
   return variables.length ? [{ type: "body", parameters: variables.map((value) => ({ type: "text", text: String(value).slice(0, 1024) })) }] : [];
 }
 
-function lastUrlSegment(url: string) {
-  try {
-    const segments = new URL(url).pathname.split("/").filter(Boolean);
-    const value = segments.at(-1);
-    if (value) return value;
-  } catch {
-    // Fall through to the safe path-only parser for relative URLs.
-  }
-  const value = url.split("?")[0].split("#")[0].split("/").filter(Boolean).at(-1);
-  if (!value) throw new WhatsAppError("INVALID_ORDER_URL", 400);
-  return value;
-}
-
 export async function sendTemplate(input: SendTemplateInput) {
   const { phoneNumberId } = config();
   const to = normalizeE164(input.to).slice(1);
@@ -325,6 +314,7 @@ export function sendRestaurantNotification(type: RestaurantNotificationType, to:
 
 interface SendOrderCreatedNotificationsInput {
   orderId: string;
+  orderAccessToken: string;
   orderNumber: string;
   restaurantName: string;
   restaurantPhone: string;
@@ -333,8 +323,6 @@ interface SendOrderCreatedNotificationsInput {
   total: string | number;
   orderType: string;
   orderTime: string;
-  customerOrderUrl: string;
-  restaurantOrderUrl: string;
   language?: string;
 }
 
@@ -379,9 +367,7 @@ export async function sendOrderCreatedNotifications(
           type: "button",
           sub_type: "url",
           index: "0",
-          parameters: [
-            { type: "text", text: lastUrlSegment(input.customerOrderUrl) },
-          ],
+          parameters: [{ type: "text", text: input.orderAccessToken }],
         },
       ],
     }),
@@ -409,9 +395,7 @@ export async function sendOrderCreatedNotifications(
           type: "button",
           sub_type: "url",
           index: "0",
-          parameters: [
-            { type: "text", text: lastUrlSegment(input.restaurantOrderUrl) },
-          ],
+          parameters: [{ type: "text", text: input.orderAccessToken }],
         },
       ],
     }),
