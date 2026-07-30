@@ -14,7 +14,13 @@ const TurnstileWidget = dynamic(
   { ssr: false },
 );
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+export function AuthForm({
+  mode,
+  redirectTo = "/auth/continue",
+}: {
+  mode: "login" | "register";
+  redirectTo?: "/auth/continue" | "/account";
+}) {
   const router = useRouter();
   const t = useTranslations("auth");
   const wa = useTranslations("whatsappAuth");
@@ -114,7 +120,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       setError(t("incorrect"));
       setLoading(false);
     } else {
-      router.push("/auth/continue");
+      router.push(redirectTo);
+      router.refresh();
     }
   }
 

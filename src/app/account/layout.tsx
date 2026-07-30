@@ -9,7 +9,7 @@ import { CustomerShellWrapper } from "@/components/customer-shell-wrapper";
 
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const [session, t] = await Promise.all([auth(), getTranslations("customerAccount.nav")]);
-  if (!session) redirect("/login");
+  if (!session) redirect("/customer/login");
   if (!session.user.roles.includes("CUSTOMER")) redirect("/auth/continue");
   const links = [
     { href: "/account", label: t("home"), icon: Home },
