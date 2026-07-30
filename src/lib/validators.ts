@@ -48,6 +48,7 @@ export const checkoutSchema = z.object({
   deliveryNotes: optionalAddressText(500),
   notes: z.string().trim().max(500).optional().transform((value) => value || undefined),
   turnstileToken: z.string().optional(),
+  couponCode: z.string().trim().max(40).optional().transform((value) => value || undefined),
   createAccount: z.boolean().optional().default(false),
   email: z.string().trim().toLowerCase().pipe(z.email()).optional(),
   password: z.string().min(8).regex(/[A-Z]/).regex(/[0-9]/).optional(),

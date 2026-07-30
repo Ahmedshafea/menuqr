@@ -11,6 +11,8 @@ import { RestaurantQr } from "@/components/restaurant-qr";
 import { FavoriteRestaurantButton } from "@/components/favorite-buttons";
 import { auth } from "@/auth";
 import { getDemoRestaurant } from "@/lib/demo-restaurants";
+import { calculatePromotions } from "@/lib/promotion-engine";
+import { getPromotionCandidates } from "@/lib/promotions";
 export const revalidate = 60;
 const getDatabaseRestaurant = unstable_cache(
   async (slug: string) => {
@@ -45,14 +47,18 @@ const getDatabaseRestaurant = unstable_cache(
       },
     });
     if (!restaurant) return null;
-    const rating = await prisma.restaurantReview.aggregate({
-      where: { restaurantId: restaurant.id, status: "PUBLISHED" },
-      _avg: { overall: true },
-      _count: { _all: true },
-    });
+    const [rating, promotionCandidates] = await Promise.all([
+      prisma.restaurantReview.aggregate({
+        where: { restaurantId: restaurant.id, status: "PUBLISHED" },
+        _avg: { overall: true },
+        _count: { _all: true },
+      }),
+      getPromotionCandidates({ restaurantId: restaurant.id }),
+    ]);
     return {
       ...restaurant,
       rating: { average: rating._avg.overall ?? 0, count: rating._count._all },
+      promotionCandidates,
     };
   },
   ["public-menu-with-comment-reviews"],
@@ -106,14 +112,42 @@ export default async function MenuPage({
   const closingSoon = open && closingMinutes !== null && closingMinutes <= 30;
   const accepting = (restaurant.settings?.allowOrdering ?? true) && (open || (restaurant.settings?.allowOrdersOutsideHours ?? false));
   const todayHours = branch?.workingHours.find((item) => item.dayOfWeek === cairoDayAndTime().day);
-  const products = restaurant.products.map((product) => ({
+  const products = restaurant.products.map((product) => {
+    const basePrice = Number(product.price);
+    const productPromotion =
+      "promotionCandidates" in restaurant
+        ? calculatePromotions(restaurant.promotionCandidates, {
+            subtotal: basePrice,
+            lines: [{
+              productId: product.id,
+              categoryId:
+                "id" in product.category
+                  ? product.category.id
+                  : product.category.name,
+              unitPrice: basePrice,
+              quantity: 1,
+            }],
+            fulfillmentType: "PICKUP",
+            branchId: branch && "id" in branch ? branch.id : null,
+          })
+        : null;
+    const discountedPrice = productPromotion?.discountAmount
+      ? Math.max(0, basePrice - productPromotion.discountAmount)
+      : null;
+    return {
     id: product.id,
     name: locale === "ar" && product.nameAr ? product.nameAr : product.name,
     description:
       locale === "ar" && product.descriptionAr
         ? product.descriptionAr
         : (product.description ?? ""),
-    price: Number(product.price),
+    price: basePrice,
+    discountedPrice,
+    promotionLabel: productPromotion?.appliedPromotions[0]
+      ? locale === "ar" && productPromotion.appliedPromotions[0].nameAr
+        ? productPromotion.appliedPromotions[0].nameAr
+        : productPromotion.appliedPromotions[0].name
+      : null,
     category:
       locale === "ar" && product.category.nameAr
         ? product.category.nameAr
@@ -127,7 +161,7 @@ export default async function MenuPage({
       price: Number(extra.price),
     })), ...("optionGroups" in product ? product.optionGroups.flatMap(({group})=>group.options.filter(({option})=>option.isAvailable).map(({option})=>({id:option.id,name:locale==="ar"&&option.nameAr?option.nameAr:option.name,price:Number(option.priceAdjustment)}))) : [])],
     optionGroups: "optionGroups" in product ? product.optionGroups.map(({group})=>{const options=group.options.filter(({option})=>option.isAvailable).map(({option})=>({id:option.id,name:locale==="ar"&&option.nameAr?option.nameAr:option.name,price:Number(option.priceAdjustment)}));return{id:group.id,name:locale==="ar"&&group.nameAr?group.nameAr:group.name,required:group.isRequired,min:group.isRequired?Math.max(1,group.minSelections):0,max:group.isRequired?group.maxSelections:options.length,options}}).filter((group)=>group.options.length>0) : [],
-  }));
+  }});
   const menuParams = await searchParams;
   const reorder = menuParams.reorder ?? "";
   const availableIds = new Set(products.filter((product) => product.available).map((product) => product.id));
@@ -321,6 +355,21 @@ export default async function MenuPage({
             fulfillment:{delivery:restaurant.settings?.offersDelivery??true,pickup:restaurant.settings?.offersPickup??true,dineIn:restaurant.settings?.offersDineIn??false},
           }}
           products={products}
+          promotionBanners={
+            "promotionCandidates" in restaurant
+              ? restaurant.promotionCandidates
+                  .filter((promotion) => promotion.autoApply || promotion.coupons?.length)
+                  .slice(0, 3)
+                  .map((promotion) => ({
+                    id: promotion.id,
+                    name:
+                      locale === "ar" && promotion.nameAr
+                        ? promotion.nameAr
+                        : promotion.name,
+                    coupon: promotion.coupons?.find((coupon) => coupon.isActive)?.code,
+                  }))
+              : []
+          }
           orderingEnabled={accepting}
           initialCart={initialCart}
           initialSelectedExtras={initialSelectedExtras}

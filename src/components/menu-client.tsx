@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Heart, LayoutGrid, List, MapPin, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
@@ -18,6 +18,8 @@ export type MenuProduct = {
   name: string;
   description: string;
   price: number;
+  discountedPrice?: number | null;
+  promotionLabel?: string | null;
   category: string;
   image: string;
   featured?: boolean;
@@ -28,6 +30,7 @@ export type MenuProduct = {
 export function MenuClient({
   restaurant,
   products,
+  promotionBanners = [],
   orderingEnabled = true,
   initialCart = {},
   initialSelectedExtras = {},
@@ -45,6 +48,7 @@ export function MenuClient({
     pricing:{deliveryFee:number;deliveryFeeType:string;serviceFee:number;serviceFeeType:string;taxRate:number;taxType:string;discountValue:number;discountType:string};
   };
   products: MenuProduct[];
+  promotionBanners?: Array<{ id: string; name: string; coupon?: string }>;
   orderingEnabled?: boolean;
   initialCart?: Record<string, number>;
   initialSelectedExtras?: Record<string, string[]>;
@@ -62,6 +66,7 @@ export function MenuClient({
   const mapsText = useTranslations("maps");
   const checkoutText = useTranslations("checkoutUx");
   const productDetailsText = useTranslations("productDetails");
+  const promotionText = useTranslations("promotions.checkout");
   const locale = useLocale();
   const defaultFulfillment = restaurant.fulfillment.delivery
     ? "DELIVERY"
@@ -84,6 +89,11 @@ export function MenuClient({
   const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
   const [checkoutStep, setCheckoutStep] = useState(0);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState("");
+  const [couponMessage, setCouponMessage] = useState("");
+  const [promotionPricing, setPromotionPricing] = useState<ReturnType<typeof calculateOrderPricing> | null>(null);
+  const [appliedPromotions, setAppliedPromotions] = useState<Array<{id:string;name:string;nameAr?:string|null;discountAmount:number;freeDelivery:boolean}>>([]);
   useEffect(() => {
     const saved = window.localStorage.getItem("menuqr-menu-view");
     if (saved === "grid" || saved === "list") setViewMode(saved);
@@ -127,6 +137,73 @@ export function MenuClient({
     () => calculateOrderPricing(total, fulfillmentType, restaurant.pricing),
     [fulfillmentType, restaurant.pricing, total],
   );
+  const promotionItems = useMemo(
+    () =>
+      products
+        .filter((product) => cart[product.id])
+        .map((product) => ({
+          productId: product.id,
+          quantity: cart[product.id],
+          extraTotal: product.extras
+            .filter((extra) => selectedExtras[product.id]?.includes(extra.id))
+            .reduce((sum, extra) => sum + extra.price, 0),
+        })),
+    [cart, products, selectedExtras],
+  );
+  const calculatePromotionPricing = useCallback(
+    async (couponCode?: string) => {
+      if (demo || promotionItems.length === 0) {
+        setPromotionPricing(null);
+        setAppliedPromotions([]);
+        return;
+      }
+      const response = await fetch("/api/promotions/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          restaurantSlug: restaurant.slug,
+          fulfillmentType,
+          couponCode: couponCode || undefined,
+          items: promotionItems,
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.couponError) {
+        setPromotionPricing(null);
+        setAppliedPromotions([]);
+        if (couponCode) {
+          const key = result?.couponError as
+            | "COUPON_NOT_FOUND"
+            | "COUPON_INACTIVE"
+            | "COUPON_EXPIRED"
+            | "COUPON_USAGE_LIMIT"
+            | "COUPON_CUSTOMER_LIMIT"
+            | "COUPON_NOT_ELIGIBLE";
+          setCouponMessage(
+            key && promotionText.has(key)
+              ? promotionText(key)
+              : promotionText("invalid"),
+          );
+        }
+        return;
+      }
+      setPromotionPricing(result.pricing);
+      setAppliedPromotions(result.appliedPromotions || []);
+      if (couponCode) {
+        setAppliedCoupon(couponCode.trim().toUpperCase());
+        setCouponMessage(promotionText("applied"));
+      }
+    },
+    [demo, fulfillmentType, promotionItems, promotionText, restaurant.slug],
+  );
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => void calculatePromotionPricing(appliedCoupon),
+      350,
+    );
+    return () => window.clearTimeout(timer);
+  }, [appliedCoupon, calculatePromotionPricing]);
+  const displayPricing = promotionPricing || pricing;
   const money = (value: number) =>
     new Intl.NumberFormat(locale, {
       style: "currency",
@@ -234,6 +311,7 @@ export function MenuClient({
         email: createAccount ? form.get("email") : undefined,
         password: createAccount ? form.get("password") : undefined,
         turnstileToken,
+        couponCode: appliedCoupon || undefined,
         items: orderItems,
       }),
     });
@@ -241,7 +319,11 @@ export function MenuClient({
     if (!response.ok) {
       const code = body.error?.code;
       setError(
-        code === "INVALID_ORDER"
+        code?.startsWith("COUPON_")
+          ? promotionText.has(code)
+            ? promotionText(code)
+            : promotionText("invalid")
+          : code === "INVALID_ORDER"
           ? t("invalidOrder")
           : code === "TURNSTILE_FAILED"
             ? t("verificationFailed")
@@ -258,6 +340,16 @@ export function MenuClient({
     <>
       {products.length ? (
         <>
+          {promotionBanners.length > 0 && (
+            <section className="promotion-banners" aria-label={promotionText("appliedPromotions")}>
+              {promotionBanners.map((promotion) => (
+                <article key={promotion.id}>
+                  <b>{promotion.name}</b>
+                  {promotion.coupon && <span>{promotionText("coupon")}: <code>{promotion.coupon}</code></span>}
+                </article>
+              ))}
+            </section>
+          )}
           <div className="menu-tools">
             <div className="menu-search">
               <Search />
@@ -325,6 +417,7 @@ export function MenuClient({
                       />
                     )}
                     {product.featured && <span>{t("featured")}</span>}
+                    {product.promotionLabel && <span className="sale-badge">{product.promotionLabel}</span>}
                     {!product.available && <span className="unavailable-badge">{productText("temporary")}</span>}
                   </div>
                 </button>
@@ -334,7 +427,10 @@ export function MenuClient({
                       <h3>{product.name}</h3>
                     </button>
                     <p>{product.description}</p>
-                    <strong>{money(product.price)}</strong>
+                    <strong className={product.discountedPrice != null ? "sale-price" : undefined}>
+                      {product.discountedPrice != null && <del>{money(product.price)}</del>}
+                      {money(product.discountedPrice ?? product.price)}
+                    </strong>
                   </div>
                   {cart[product.id] ? (
                     <div className="qty">
@@ -371,7 +467,7 @@ export function MenuClient({
                 <div className="product-sheet-copy">
                   <h2>{selectedProduct.name}</h2>
                   <p>{selectedProduct.description}</p>
-                  <strong>{money(selectedProduct.price)}</strong>
+                  <strong className={selectedProduct.discountedPrice != null ? "sale-price" : undefined}>{selectedProduct.discountedPrice != null && <del>{money(selectedProduct.price)}</del>}{money(selectedProduct.discountedPrice ?? selectedProduct.price)}</strong>
                   {[...selectedProduct.optionGroups.map((group) => ({...group, standalone:false})), ...(selectedProduct.extras.filter((extra) => !selectedProduct.optionGroups.some((group) => group.options.some((option) => option.id === extra.id))).length ? [{id:"extras",name:productDetailsText("extras"),required:false,min:0,max:999,options:selectedProduct.extras.filter((extra) => !selectedProduct.optionGroups.some((group) => group.options.some((option) => option.id === extra.id))),standalone:true}] : [])].map((group) => (
                     <fieldset key={group.id}>
                       <legend>{group.name}<small>{group.required ? optionText("required") : optionText("optional")}</small></legend>
@@ -406,7 +502,7 @@ export function MenuClient({
             {t("cart", { count })}
           </span>
           <b>
-            {t("viewOrder")} · {money(pricing.total)}
+            {t("viewOrder")} · {money(displayPricing.total)}
           </b>
         </button>
       )}
@@ -544,7 +640,7 @@ export function MenuClient({
             </div>
             <div className="cart-total">
               <span>{t("total")}</span>
-              <strong>{money(pricing.total)}</strong>
+              <strong>{money(displayPricing.total)}</strong>
             </div>
             <div className="checkout-step-actions"><button type="button" className="button primary" onClick={() => setCheckoutStep(1)}>{common("next")}</button></div>
             </div>
@@ -613,15 +709,20 @@ export function MenuClient({
                   <div><small>{restaurant.name}</small><h3 id="checkout-summary-title">{checkoutText("paymentSummary")}</h3></div>
                   {restaurant.phone && <a href={`tel:${restaurant.phone}`}>{restaurant.phone}</a>}
                 </header>
-                <div><span>{checkoutText("subtotal")}</span><b>{money(pricing.subtotal)}</b></div>
-                {fulfillmentType === "DELIVERY" && <div><span>{checkoutText("deliveryFee")}</span><b>{money(pricing.deliveryFee)}</b></div>}
-                {pricing.discountAmount > 0 && <div className="discount-line"><span>{checkoutText("discount")}</span><b>− {money(pricing.discountAmount)}</b></div>}
-                {pricing.serviceFee > 0 && <div><span>{checkoutText("serviceFee")}</span><b>{money(pricing.serviceFee)}</b></div>}
-                {pricing.taxAmount > 0 && <div><span>{checkoutText("tax")}</span><b>{money(pricing.taxAmount)}</b></div>}
+                <div><span>{checkoutText("subtotal")}</span><b>{money(displayPricing.subtotal)}</b></div>
+                {fulfillmentType === "DELIVERY" && <div><span>{checkoutText("deliveryFee")}</span><b>{money(displayPricing.deliveryFee)}</b></div>}
+                {displayPricing.discountAmount > 0 && <div className="discount-line"><span>{checkoutText("discount")}</span><b>− {money(displayPricing.discountAmount)}</b></div>}
+                {displayPricing.serviceFee > 0 && <div><span>{checkoutText("serviceFee")}</span><b>{money(displayPricing.serviceFee)}</b></div>}
+                {displayPricing.taxAmount > 0 && <div><span>{checkoutText("tax")}</span><b>{money(displayPricing.taxAmount)}</b></div>}
                 <div><span>{checkoutText("paymentMethod")}</span><b>{checkoutText("cash")}</b></div>
                 <div><span>{checkoutText("estimatedTime")}</span><b>{restaurant.estimatedMinutes} {checkoutText("minutes")}</b></div>
                 {fulfillmentType === "DELIVERY" && deliveryAddress && <p><strong>{checkoutText("deliveryAddress")}</strong>{deliveryAddress}</p>}
-                <footer><span>{checkoutText("grandTotal")}</span><strong>{money(pricing.total)}</strong></footer>
+                <section className="checkout-coupon">
+                  <label>{promotionText("coupon")}<div><input value={couponInput} onChange={(event) => setCouponInput(event.target.value.toUpperCase())} placeholder={promotionText("placeholder")} disabled={Boolean(appliedCoupon)} /><button type="button" className="button ghost" onClick={() => appliedCoupon ? (setAppliedCoupon(""), setCouponInput(""), setCouponMessage("")) : void calculatePromotionPricing(couponInput)}>{appliedCoupon ? promotionText("remove") : promotionText("apply")}</button></div></label>
+                  {couponMessage && <small className={appliedCoupon ? "coupon-success" : "form-error"}>{couponMessage}</small>}
+                  {appliedPromotions.length > 0 && <div className="applied-promotions"><b>{promotionText("appliedPromotions")}</b>{appliedPromotions.map((promotion) => <span key={promotion.id}>{locale === "ar" && promotion.nameAr ? promotion.nameAr : promotion.name} · −{money(promotion.discountAmount)}</span>)}</div>}
+                </section>
+                <footer><span>{checkoutText("grandTotal")}</span><strong>{money(displayPricing.total)}</strong></footer>
               </section>
               {!demo && !customerDefaults && <section className="checkout-account-choice">
                 <h3>{accountT("saveInfoTitle")}</h3>

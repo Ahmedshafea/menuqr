@@ -10,13 +10,15 @@ export const dynamic = "force-dynamic";
 export default async function AnalyticsPage() {
   const { restaurantId } = await requireTenant();
   const since = startOfDay(subDays(new Date(), 29));
-  const [t, d, empty, deliveryText, locale, restaurant, orders, events, top, drivers] = await Promise.all([
-    getTranslations("analytics"), getTranslations("dashboard"), getTranslations("mvpPolish.empty"), getTranslations("restaurantWorkflow.delivery"), getLocale(),
+  const [t, d, empty, deliveryText, promotionText, locale, restaurant, orders, events, top, drivers, promotionSummary, promotionTop] = await Promise.all([
+    getTranslations("analytics"), getTranslations("dashboard"), getTranslations("mvpPolish.empty"), getTranslations("restaurantWorkflow.delivery"), getTranslations("promotions.analytics"), getLocale(),
     prisma.restaurant.findUniqueOrThrow({ where: { id: restaurantId }, select: { currency: true } }),
     prisma.order.findMany({ where: { restaurantId, createdAt: { gte: since } }, select: { total: true, status: true, createdAt: true, fulfillmentType: true, outForDeliveryAt: true, deliveredAt: true, driver: { select: { id: true, name: true } } } }),
     prisma.analyticsEvent.groupBy({ by: ["type"], where: { restaurantId, createdAt: { gte: since } }, _count: { _all: true } }),
     prisma.orderItem.groupBy({ by: ["productName"], where: { order: { restaurantId, createdAt: { gte: since }, status: { not: "CANCELLED" } } }, _sum: { quantity: true }, orderBy: { _sum: { quantity: "desc" } }, take: 10 }),
     prisma.order.groupBy({ by: ["driverId"], where: { restaurantId, driverId: { not: null }, createdAt: { gte: since }, status: { in: ["DELIVERED", "COMPLETED"] } }, _count: { _all: true }, orderBy: { _count: { driverId: "desc" } }, take: 5 }),
+    prisma.promotionOrder.aggregate({ where: { order: { restaurantId }, createdAt: { gte: since } }, _sum: { discountAmount: true }, _count: { _all: true } }),
+    prisma.promotionOrder.groupBy({ by: ["promotionId", "promotionName"], where: { order: { restaurantId }, createdAt: { gte: since } }, _sum: { discountAmount: true }, _count: { _all: true }, orderBy: { _count: { promotionId: "desc" } }, take: 5 }),
   ]);
   const completed = orders.filter((order) => order.status === "COMPLETED");
   const revenue = completed.reduce((sum, order) => sum + Number(order.total), 0);
@@ -48,6 +50,7 @@ export default async function AnalyticsPage() {
       <DashboardDisclosure title={t("title")} summary={t("last30")}><div className="stats">{stats.map((stat) => <article key={stat.label}><stat.icon /><p>{stat.label}</p><strong>{stat.value}</strong></article>)}</div></DashboardDisclosure>
       <DashboardDisclosure title={t("dailyOrders")}><div className="analytics-bars">{daily.map((day) => <i key={day.date.toISOString()} style={{ height: `${Math.max(3, day.count / max * 100)}%` }} title={`${day.count}`} />)}</div></DashboardDisclosure>
       <DashboardDisclosure title={t("popular")} summary={top.length}><div className="record-list">{top.map((product, index) => <RecordDisclosure key={product.productName} title={`${index + 1}. ${product.productName}`} meta={product._sum.quantity ?? 0}><p><b>{t("popular")}</b><span>{product.productName}</span></p><p><b>{d("qrScans")}</b><span>{scans}</span></p></RecordDisclosure>)}</div></DashboardDisclosure>
+      <DashboardDisclosure title={promotionText("title")} summary={promotionSummary._count._all}><div className="stats"><article><p>{promotionText("ordersAffected")}</p><strong>{promotionSummary._count._all}</strong></article><article><p>{promotionText("discountCost")}</p><strong>{money(Number(promotionSummary._sum.discountAmount || 0))}</strong></article><article><p>{promotionText("conversion")}</p><strong>{orders.length ? `${Math.round((promotionSummary._count._all / orders.length) * 100)}%` : "0%"}</strong></article></div><div className="record-list">{promotionTop.map((promotion, index) => <RecordDisclosure key={`${promotion.promotionId}-${promotion.promotionName}`} title={`${index + 1}. ${promotion.promotionName}`} meta={promotion._count._all}><p><b>{promotionText("discountCost")}</b><span>{money(Number(promotion._sum.discountAmount || 0))}</span></p></RecordDisclosure>)}</div></DashboardDisclosure>
       <DashboardDisclosure title={deliveryText("title")} summary={drivers.length}><div className="record-list">{drivers.map((driver, index) => <RecordDisclosure key={driver.driverId} title={`${index + 1}. ${driver.driverId ? driverNames.get(driver.driverId) ?? driver.driverId : "—"}`} meta={driver._count._all}><p><b>{deliveryText("title")}</b><span>{driver._count._all}</span></p></RecordDisclosure>)}</div></DashboardDisclosure>
     </section>
   );

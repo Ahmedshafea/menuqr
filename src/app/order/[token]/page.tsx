@@ -36,13 +36,14 @@ export default async function OrderTrackingPage({
 }) {
   const { token } = await params;
   const { result } = await searchParams;
-  const [session, t, flow, deliveryText, reviewText, mapsText, locale, order] = await Promise.all([
+  const [session, t, flow, deliveryText, reviewText, mapsText, promotionText, locale, order] = await Promise.all([
     auth(),
     getTranslations("orderTracking"),
     getTranslations("launchPolish.orders"),
     getTranslations("restaurantWorkflow.delivery"),
     getTranslations("restaurantWorkflow.reviews"),
     getTranslations("maps"),
+    getTranslations("promotions.checkout"),
     getLocale(),
     prisma.order.findUnique({
       where: { accessToken: token },
@@ -63,6 +64,7 @@ export default async function OrderTrackingPage({
         items: { select: { id: true, productId:true, productName: true, unitPrice: true, quantity: true, notes: true, isComplimentary: true, product:{select:{images:{orderBy:{sortOrder:"asc"},take:1,select:{url:true}}}}, extras: { select: { id: true, name: true, price: true, extraId:true } },options:{select:{id:true,name:true,price:true,optionId:true}} } },
         driver:{select:{id:true,name:true,phone:true,whatsapp:true,photoUrl:true,vehicleType:true,status:true}},
         review:{select:{id:true,foodQuality:true,deliverySpeed:true,packaging:true,overall:true,comment:true,status:true}},
+        promotionOrders:{select:{id:true,promotionName:true,promotionType:true,discountAmount:true,snapshot:true},orderBy:{createdAt:"asc"}},
         messages: {
           orderBy: { createdAt: "asc" },
           select: { id: true, body: true, sender: true, createdAt: true },
@@ -714,6 +716,7 @@ export default async function OrderTrackingPage({
               <div className="order-pricing-summary">
                 <p><span>{t("subtotal")}</span><b>{money(Number(order.subtotal))}</b></p>
                 <p><span>{t("discount")}</span><b>- {money(Number(order.discountAmount))}</b></p>
+                {order.promotionOrders.length > 0 && <div className="applied-promotions"><b>{promotionText("appliedPromotions")}</b>{order.promotionOrders.map((promotion)=><span key={promotion.id}>{promotion.promotionName} · −{money(Number(promotion.discountAmount))}</span>)}{order.couponCode&&<code>{order.couponCode}</code>}</div>}
                 <p><span>{t("deliveryFee")}</span><b>{money(Number(order.deliveryFee))}</b></p>
                 <p><span>{t("serviceFee")}</span><b>{money(Number(order.serviceFee))}</b></p>
                 <p><span>{t("tax")}</span><b>{money(Number(order.taxAmount))}</b></p>
