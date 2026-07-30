@@ -32,8 +32,6 @@ export type DemoRestaurant = {
     serviceFeeType?: string;
     taxRate?: number;
     taxType?: string;
-    discountValue?: number;
-    discountType?: string;
   };
   branches: {
     address: string;

@@ -45,7 +45,7 @@ export function MenuClient({
     currency: string;
     estimatedMinutes: number;
     fulfillment:{delivery:boolean;pickup:boolean;dineIn:boolean};
-    pricing:{deliveryFee:number;deliveryFeeType:string;serviceFee:number;serviceFeeType:string;taxRate:number;taxType:string;discountValue:number;discountType:string};
+    pricing:{deliveryFee:number;deliveryFeeType:string;serviceFee:number;serviceFeeType:string;taxRate:number;taxType:string};
   };
   products: MenuProduct[];
   promotionBanners?: Array<{ id: string; name: string; coupon?: string }>;

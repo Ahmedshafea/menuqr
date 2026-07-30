@@ -351,7 +351,7 @@ export default async function MenuPage({
             slug: restaurant.slug,
             currency: restaurant.currency,
             estimatedMinutes: restaurant.settings?.estimatedOrderMinutes ?? 30,
-            pricing:{deliveryFee:Number(restaurant.settings?.deliveryFee??0),deliveryFeeType:restaurant.settings?.deliveryFeeType??"FIXED",serviceFee:Number(restaurant.settings?.serviceFee??0),serviceFeeType:restaurant.settings?.serviceFeeType??"FIXED",taxRate:Number(restaurant.settings?.taxRate??0),taxType:restaurant.settings?.taxType??"PERCENTAGE",discountValue:Number(restaurant.settings?.discountValue??0),discountType:restaurant.settings?.discountType??"FIXED"},
+            pricing:{deliveryFee:Number(restaurant.settings?.deliveryFee??0),deliveryFeeType:restaurant.settings?.deliveryFeeType??"FIXED",serviceFee:Number(restaurant.settings?.serviceFee??0),serviceFeeType:restaurant.settings?.serviceFeeType??"FIXED",taxRate:Number(restaurant.settings?.taxRate??0),taxType:restaurant.settings?.taxType??"PERCENTAGE"},
             fulfillment:{delivery:restaurant.settings?.offersDelivery??true,pickup:restaurant.settings?.offersPickup??true,dineIn:restaurant.settings?.offersDineIn??false},
           }}
           products={products}

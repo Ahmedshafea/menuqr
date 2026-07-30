@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       currency: true,
       locale: true,
       isActive: true,
-      settings: { select: { allowOrdering: true, allowOrdersOutsideHours: true,offersDelivery:true,offersPickup:true,offersDineIn:true,deliveryFee:true,deliveryFeeType:true,serviceFee:true,serviceFeeType:true,taxRate:true,taxType:true,discountValue:true,discountType:true } },
+      settings: { select: { allowOrdering: true, allowOrdersOutsideHours: true,offersDelivery:true,offersPickup:true,offersDineIn:true,deliveryFee:true,deliveryFeeType:true,serviceFee:true,serviceFeeType:true,taxRate:true,taxType:true } },
       branches: {
         where: { isActive: true },
         select: {
@@ -190,7 +190,6 @@ export async function POST(request: Request) {
     deliveryFee: Number(restaurant.settings.deliveryFee),
     serviceFee: Number(restaurant.settings.serviceFee),
     taxRate: Number(restaurant.settings.taxRate),
-    discountValue: Number(restaurant.settings.discountValue),
   } : {}, promotionCalculation);
   const number = `MQ-${Date.now().toString(36).toUpperCase()}`;
   // 72 bits of cryptographic entropy keeps public order links unguessable while

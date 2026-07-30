@@ -37,8 +37,6 @@ export async function POST(request: Request) {
             serviceFeeType: true,
             taxRate: true,
             taxType: true,
-            discountValue: true,
-            discountType: true,
           },
         },
         products: {
@@ -99,7 +97,6 @@ export async function POST(request: Request) {
         deliveryFee: Number(restaurant.settings.deliveryFee),
         serviceFee: Number(restaurant.settings.serviceFee),
         taxRate: Number(restaurant.settings.taxRate),
-        discountValue: Number(restaurant.settings.discountValue),
       }
     : {};
   const pricing = calculateOrderPricing(
