@@ -26,11 +26,9 @@ export default async function SettingsPage() {
       where: { id: restaurantId },
       include: {
         settings: true,
-        branches: { include: { workingHours: true }, take: 1 },
       },
     }),
   ]);
-  const branch = restaurant.branches[0];
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}`;
   async function save(form: FormData) {
     "use server";
@@ -91,38 +89,27 @@ export default async function SettingsPage() {
           ...(uploadedCover ? { coverUrl: uploadedCover.url } : {}),
         },
       });
-      let currentBranch = await tx.branch.findFirst({
+      const currentBranch = await tx.branch.findFirst({
         where: { restaurantId },
         select: { id: true },
       });
-      if (currentBranch)
-        await tx.branch.update({
-          where: { id: currentBranch.id },
-          data: { name, address },
-        });
-      else
-        currentBranch = await tx.branch.create({
-          data: { restaurantId, name, address },
-          select: { id: true },
-        });
-      for (let day = 0; day < 7; day++) {
-        const isClosed = form.get(`closed-${day}`) === "on";
-        const opensAt = String(form.get(`open-${day}`) || "") || null;
-        const closesAt = String(form.get(`close-${day}`) || "") || null;
-        await tx.workingHour.upsert({
-          where: {
-            branchId_dayOfWeek: { branchId: currentBranch.id, dayOfWeek: day },
+      if (!currentBranch)
+        await tx.branch.create({
+          data: {
+            restaurantId,
+            name,
+            slug: "main",
+            address,
+            workingHours: {
+              create: Array.from({ length: 7 }, (_, dayOfWeek) => ({
+                dayOfWeek,
+                opensAt: "00:00",
+                closesAt: "23:59",
+                isClosed: false,
+              })),
+            },
           },
-          create: {
-            branchId: currentBranch.id,
-            dayOfWeek: day,
-            isClosed,
-            opensAt,
-            closesAt,
-          },
-          update: { isClosed, opensAt, closesAt },
         });
-      }
       await tx.setting.upsert({
         where: { restaurantId },
         create: {
@@ -262,7 +249,7 @@ export default async function SettingsPage() {
               {t("address")}
               <input
                 name="address"
-                defaultValue={restaurant.address ?? branch?.address ?? ""}
+                defaultValue={restaurant.address ?? ""}
               />
             </label>
             <div className="full restaurant-location-field">
@@ -386,44 +373,6 @@ export default async function SettingsPage() {
                 <small>{item.help}</small>
               </fieldset>
             ))}
-          </div>
-        </AccordionSection>
-        <AccordionSection title={t("hours")} className="settings-section">
-          <div className="working-hours-grid">
-            {Array.from({ length: 7 }, (_, day) => {
-              const hours = branch?.workingHours.find(
-                (item) => item.dayOfWeek === day,
-              );
-              return (
-                <div className="working-day" key={day}>
-                  <strong>{t(`days.${day}`)}</strong>
-                  <label>
-                    {t("openTime")}
-                    <input
-                      name={`open-${day}`}
-                      type="time"
-                      defaultValue={hours?.opensAt ?? "09:00"}
-                    />
-                  </label>
-                  <label>
-                    {t("closeTime")}
-                    <input
-                      name={`close-${day}`}
-                      type="time"
-                      defaultValue={hours?.closesAt ?? "23:00"}
-                    />
-                  </label>
-                  <label className="check-label">
-                    <input
-                      name={`closed-${day}`}
-                      type="checkbox"
-                      defaultChecked={hours?.isClosed ?? false}
-                    />
-                    {t("closed")}
-                  </label>
-                </div>
-              );
-            })}
           </div>
         </AccordionSection>
         <AccordionSection title={notifications("title")} className="settings-section">

@@ -12,5 +12,8 @@
   "orderStatusChanged": "Order status updated.",
   "orderUpdated": "Order updated and total recalculated.",
   "profileUpdated": "Customer profile updated.",
-  "imageUploaded": "Image uploaded successfully."
+  "imageUploaded": "Image uploaded successfully.",
+  "branchCreated": "Branch created successfully.",
+  "branchUpdated": "Branch updated successfully.",
+  "branchDeleted": "Branch deleted successfully."
 }

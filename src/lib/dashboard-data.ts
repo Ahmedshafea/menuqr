@@ -73,6 +73,7 @@ export async function getDashboardData(restaurantId: string) {
         total: true,
         status: true,
         createdAt: true,
+        branch: { select: { name: true } },
         _count: { select: { items: true } },
       },
     }),

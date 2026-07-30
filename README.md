@@ -253,3 +253,37 @@ Existing restaurants and orders remain compatible: with no active promotions,
 the shared pricing result is unchanged. Automated tests for coupon validation,
 discount types, scheduling, limits, priority, and stacking live in
 `src/lib/promotion-engine.test.ts`.
+
+## Multi-branch restaurants
+
+Branches are managed from `/dashboard/branches`. Each branch owns its contact
+details, address, coordinates, opening hours, active status, WhatsApp routing,
+and permanent menu slug. Restaurant identity, products, and other shared data
+remain on `Restaurant`; they are not duplicated per branch.
+
+Public URLs:
+
+- `/menu/{restaurantSlug}` — restaurant menu; checkout asks for a branch only
+  when more than one active branch exists.
+- `/menu/{restaurantSlug}/{branchSlug}` — branch QR URL; the branch is locked
+  for the session and no selection dialog is shown.
+
+The selected branch is sent to the server and validated against the restaurant
+before pricing or order creation. `Order.branchId` stores it permanently. If
+`useRestaurantWhatsapp` is disabled and the branch has a WhatsApp number, new
+orders are routed there; otherwise routing safely falls back to the restaurant
+WhatsApp number. Existing approved WhatsApp templates remain compatible because
+the branch name is appended to the existing order-type variable.
+
+Branch endpoints are authenticated and tenant-scoped:
+
+- `GET|POST /api/branches`
+- `GET|PUT|DELETE /api/branches/{id}`
+
+The multi-branch migration backfills a stable `main` branch and seven open
+working-hour records for any legacy restaurant that has no branch, preserving
+the existing ordering flow. Apply it with:
+
+```bash
+npm run db:deploy
+```

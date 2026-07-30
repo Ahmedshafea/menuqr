@@ -19,6 +19,7 @@ import {
   promotionCustomerKey,
   recordPromotionUsage,
 } from "@/lib/promotions";
+import { branchWhatsapp } from "@/lib/branches";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       id: true,
       name: true,
       nameAr: true,
+      phone: true,
       whatsapp: true,
       currency: true,
       locale: true,
@@ -50,6 +52,11 @@ export async function POST(request: Request) {
         where: { isActive: true },
         select: {
           id: true,
+          name: true,
+          slug: true,
+          phone: true,
+          whatsappNumber: true,
+          useRestaurantWhatsapp: true,
           workingHours: {
             select: {
               dayOfWeek: true,
@@ -59,7 +66,6 @@ export async function POST(request: Request) {
             },
           },
         },
-        take: 1,
       },
       products: {
         where: {
@@ -88,12 +94,21 @@ export async function POST(request: Request) {
     },
   });
   if (!restaurant?.isActive) return apiError("RESTAURANT_UNAVAILABLE", 404);
+  const selectedBranch = data.branchId
+    ? restaurant.branches.find((branch) => branch.id === data.branchId)
+    : restaurant.branches.length === 1
+      ? restaurant.branches[0]
+      : null;
+  if (data.branchId && !selectedBranch)
+    return apiError("BRANCH_UNAVAILABLE", 409);
+  if (!data.branchId && restaurant.branches.length > 1)
+    return apiError("BRANCH_REQUIRED", 409);
   if((data.fulfillmentType==="DELIVERY"&&!restaurant.settings?.offersDelivery)||(data.fulfillmentType==="PICKUP"&&!restaurant.settings?.offersPickup)||(data.fulfillmentType==="DINE_IN"&&!restaurant.settings?.offersDineIn))return apiError("FULFILLMENT_UNAVAILABLE",409);
   const arabic = restaurant.locale === "ar";
   if (
     !(restaurant.settings?.allowOrdering ?? true) ||
-    !restaurant.branches[0] ||
-    (!restaurant.settings?.allowOrdersOutsideHours && !isRestaurantOpen(restaurant.branches[0].workingHours))
+    !selectedBranch ||
+    (!restaurant.settings?.allowOrdersOutsideHours && !isRestaurantOpen(selectedBranch.workingHours))
   )
     return apiError("ORDERING_CLOSED", 409);
   const productMap = new Map(
@@ -179,7 +194,7 @@ export async function POST(request: Request) {
       quantity: value.item.quantity,
     })),
     fulfillmentType: data.fulfillmentType,
-    branchId: restaurant.branches[0]?.id,
+    branchId: selectedBranch.id,
     customerOrderCount,
     couponCode: data.couponCode,
   });
@@ -260,6 +275,7 @@ export async function POST(request: Request) {
         total: pricing.total,
         customerUserId,
         restaurantId: restaurant.id,
+        branchId: selectedBranch.id,
         fulfillmentType:data.fulfillmentType,
         statusHistory: { create: { status: "NEW", userId: customerUserId } },
         items: {
@@ -283,7 +299,9 @@ export async function POST(request: Request) {
     await createRestaurantNotification(transaction, {
       restaurantId: restaurant.id,
       type: "NEW_ORDER",
-      title: arabic ? `طلب جديد #${number}` : `New order #${number}`,
+      title: arabic
+        ? `طلب جديد #${number} — ${selectedBranch.name}`
+        : `New order #${number} — ${selectedBranch.name}`,
       body: data.customerName,
       href: `/order/${accessToken}`,
       dedupeKey: `order:${created.id}`,
@@ -347,16 +365,23 @@ export async function POST(request: Request) {
   const restaurantName =
     arabic && restaurant.nameAr ? restaurant.nameAr : restaurant.name;
   const trackingUrl = publicOrderUrl(accessToken, request.url);
-  const message = arabic
+  const destinationWhatsapp = branchWhatsapp(
+    selectedBranch,
+    restaurant.whatsapp,
+  );
+  const baseMessage = arabic
     ? `طلب جديد #${number} من ${data.customerName} إلى ${restaurantName}\n\nعرض الطلب والتواصل مع العميل:\n${trackingUrl}`
     : `New order #${number} from ${data.customerName} for ${restaurantName}\n\nView the order and contact the customer:\n${trackingUrl}`;
+  const message = arabic
+    ? `الفرع: ${selectedBranch.name}\n\n${baseMessage}`
+    : `Branch: ${selectedBranch.name}\n\n${baseMessage}`;
   try {
     const notificationLocale = arabic ? "ar-EG" : "en";
     const formattedTotal = new Intl.NumberFormat(notificationLocale, {
       style: "currency",
       currency: restaurant.currency,
     }).format(pricing.total);
-    const orderType = arabic
+    const fulfillmentLabel = arabic
       ? {
           DELIVERY: "توصيل",
           PICKUP: "استلام من المطعم",
@@ -367,6 +392,7 @@ export async function POST(request: Request) {
           PICKUP: "Pickup",
           DINE_IN: "Dine-in",
         }[data.fulfillmentType];
+    const orderType = `${fulfillmentLabel} — ${selectedBranch.name}`;
     const orderTime = new Intl.DateTimeFormat(notificationLocale, {
       dateStyle: "short",
       timeStyle: "short",
@@ -377,7 +403,9 @@ export async function POST(request: Request) {
       orderAccessToken: accessToken,
       orderNumber: number,
       restaurantName,
-      restaurantPhone: restaurant.whatsapp,
+      restaurantPhone:
+        selectedBranch.phone || restaurant.phone || restaurant.whatsapp,
+      restaurantRecipientPhone: destinationWhatsapp,
       customerName: data.customerName,
       customerPhone: data.customerPhone,
       total: formattedTotal,
@@ -395,7 +423,7 @@ export async function POST(request: Request) {
       orderId: order.id,
       orderNumber: number,
       trackingUrl,
-      whatsappUrl: whatsappUrl(restaurant.whatsapp, message),
+      whatsappUrl: whatsappUrl(destinationWhatsapp, message),
     },
     { status: 201 },
   );

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import LocationField from "@/components/map/LocationField";
 import { calculateOrderPricing } from "@/lib/order-pricing";
+import { compactBranchLocation } from "@/lib/branch-display";
 const TurnstileWidget = dynamic(
   () =>
     import("@/components/turnstile-widget").then(
@@ -36,6 +37,9 @@ export function MenuClient({
   initialSelectedExtras = {},
   initialOpen = false,
   customerDefaults,
+  branches = [],
+  initialBranchId,
+  branchLocked = false,
   demo = false,
 }: {
   restaurant: {
@@ -54,6 +58,9 @@ export function MenuClient({
   initialSelectedExtras?: Record<string, string[]>;
   initialOpen?: boolean;
   customerDefaults?: { name: string; phone: string; address: string; addresses: { id: string; title: string; address: string; latitude: number | null; longitude: number | null; isDefault: boolean }[] };
+  branches?: Array<{ id: string; name: string; slug: string; address: string; city?: string | null }>;
+  initialBranchId?: string;
+  branchLocked?: boolean;
   demo?: boolean;
 }) {
   const t = useTranslations("publicMenu");
@@ -67,6 +74,7 @@ export function MenuClient({
   const checkoutText = useTranslations("checkoutUx");
   const productDetailsText = useTranslations("productDetails");
   const promotionText = useTranslations("promotions.checkout");
+  const branchText = useTranslations("branches");
   const locale = useLocale();
   const defaultFulfillment = restaurant.fulfillment.delivery
     ? "DELIVERY"
@@ -94,10 +102,31 @@ export function MenuClient({
   const [couponMessage, setCouponMessage] = useState("");
   const [promotionPricing, setPromotionPricing] = useState<ReturnType<typeof calculateOrderPricing> | null>(null);
   const [appliedPromotions, setAppliedPromotions] = useState<Array<{id:string;name:string;nameAr?:string|null;discountAmount:number;freeDelivery:boolean}>>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState(
+    initialBranchId ?? (branches.length === 1 ? branches[0]?.id ?? "" : ""),
+  );
+  const selectedBranch = branches.find(
+    (branch) => branch.id === selectedBranchId,
+  );
   useEffect(() => {
     const saved = window.localStorage.getItem("menuqr-menu-view");
     if (saved === "grid" || saved === "list") setViewMode(saved);
   }, []);
+  useEffect(() => {
+    if (branchLocked || initialBranchId || branches.length <= 1) return;
+    const stored = window.sessionStorage.getItem(
+      `menuqr-branch:${restaurant.slug}`,
+    );
+    if (stored && branches.some((branch) => branch.id === stored))
+      setSelectedBranchId(stored);
+  }, [branchLocked, branches, initialBranchId, restaurant.slug]);
+  useEffect(() => {
+    if (selectedBranchId)
+      window.sessionStorage.setItem(
+        `menuqr-branch:${restaurant.slug}`,
+        selectedBranchId,
+      );
+  }, [restaurant.slug, selectedBranchId]);
   const changeViewMode = (mode: "grid" | "list") => {
     setViewMode(mode);
     window.localStorage.setItem("menuqr-menu-view", mode);
@@ -162,6 +191,7 @@ export function MenuClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           restaurantSlug: restaurant.slug,
+          branchId: selectedBranchId || undefined,
           fulfillmentType,
           couponCode: couponCode || undefined,
           items: promotionItems,
@@ -194,7 +224,7 @@ export function MenuClient({
         setCouponMessage(promotionText("applied"));
       }
     },
-    [demo, fulfillmentType, promotionItems, promotionText, restaurant.slug],
+    [demo, fulfillmentType, promotionItems, promotionText, restaurant.slug, selectedBranchId],
   );
   useEffect(() => {
     const timer = window.setTimeout(
@@ -289,6 +319,7 @@ export function MenuClient({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         restaurantSlug: restaurant.slug,
+        branchId: selectedBranchId || undefined,
         customerName: form.get("name"),
         customerPhone: form.get("phone"),
         deliveryAddress: form.get("address") || undefined,
@@ -325,6 +356,8 @@ export function MenuClient({
             : promotionText("invalid")
           : code === "INVALID_ORDER"
           ? t("invalidOrder")
+          : code === "BRANCH_REQUIRED"
+            ? branchText("branchRequired")
           : code === "TURNSTILE_FAILED"
             ? t("verificationFailed")
             : typeof body.error === "string"
@@ -646,6 +679,32 @@ export function MenuClient({
             </div>
             <form onSubmit={checkout}>
               <div className={`checkout-step-panel ${checkoutStep === 1 ? "is-active" : ""}`}>
+              {branches.length > 1 && !branchLocked && (
+                <label className="branch-choice">
+                  <span>{branchText("chooseBranch")} *</span>
+                  <small>{branchText("chooseBranchHelp")}</small>
+                  <select
+                    required
+                    value={selectedBranchId}
+                    onChange={(event) => setSelectedBranchId(event.target.value)}
+                  >
+                    <option value="">{branchText("chooseBranch")}</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                        {compactBranchLocation(branch.address, branch.city)
+                          ? ` — ${compactBranchLocation(branch.address, branch.city)}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {selectedBranch && (branches.length === 1 || branchLocked) && (
+                <p className="selected-branch-line">
+                  <b>{branchText("selectedBranch")}:</b> {selectedBranch.name}
+                </p>
+              )}
               <div className="fulfillment-choice">{restaurant.fulfillment.delivery&&<label><input type="radio" name="fulfillmentType" value="DELIVERY" checked={fulfillmentType==="DELIVERY"} onChange={()=>setFulfillmentType("DELIVERY")}/>{demoText("delivery")}</label>}{restaurant.fulfillment.pickup&&<label><input type="radio" name="fulfillmentType" value="PICKUP" checked={fulfillmentType==="PICKUP"} onChange={()=>setFulfillmentType("PICKUP")}/>{demoText("pickup")}</label>}{restaurant.fulfillment.dineIn&&<label><input type="radio" name="fulfillmentType" value="DINE_IN" checked={fulfillmentType==="DINE_IN"} onChange={()=>setFulfillmentType("DINE_IN")}/>{demoText("dineIn")}</label>}</div>
               <input name="name" required placeholder={t("name")} defaultValue={customerDefaults?.name} />
               <input name="phone" required placeholder={t("phone")} defaultValue={customerDefaults?.phone} />
@@ -709,6 +768,7 @@ export function MenuClient({
                   <div><small>{restaurant.name}</small><h3 id="checkout-summary-title">{checkoutText("paymentSummary")}</h3></div>
                   {restaurant.phone && <a href={`tel:${restaurant.phone}`}>{restaurant.phone}</a>}
                 </header>
+                {selectedBranch && <div><span>{branchText("selectedBranch")}</span><b>{selectedBranch.name}</b></div>}
                 <div><span>{checkoutText("subtotal")}</span><b>{money(displayPricing.subtotal)}</b></div>
                 {fulfillmentType === "DELIVERY" && <div><span>{checkoutText("deliveryFee")}</span><b>{money(displayPricing.deliveryFee)}</b></div>}
                 {displayPricing.discountAmount > 0 && <div className="discount-line"><span>{checkoutText("discount")}</span><b>− {money(displayPricing.discountAmount)}</b></div>}

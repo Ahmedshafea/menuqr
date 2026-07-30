@@ -52,11 +52,12 @@ export default async function OrdersPage({
         }
       : {}),
   };
-  const [t, common, flow, empty, locale, restaurant, orders, total] = await Promise.all([
+  const [t, common, flow, empty, branchText, locale, restaurant, orders, total] = await Promise.all([
     getTranslations("orders"),
     getTranslations("common"),
     getTranslations("launchPolish.orders"),
     getTranslations("mvpPolish.empty"),
+    getTranslations("branches"),
     getLocale(),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
@@ -67,7 +68,10 @@ export default async function OrdersPage({
       orderBy: { createdAt: params.sort === "oldest" ? "asc" : "desc" },
       skip: (page - 1) * take,
       take,
-      include: { _count: { select: { items: true } } },
+      include: {
+        branch: { select: { name: true } },
+        _count: { select: { items: true } },
+      },
     }),
     prisma.order.count({ where }),
   ]);
@@ -190,6 +194,7 @@ export default async function OrdersPage({
                 <p><b>{t("phone")}</b><span>{order.customerPhone}</span></p>
                 <p><b>{t("items")}</b><span>{order._count.items}</span></p>
                 <p><b>{t("status")}</b><span>{flow(`statuses.${order.status}`)}</span></p>
+                <p><b>{branchText("selectedBranch")}</b><span>{order.branch?.name ?? "—"}</span></p>
                 <Link className="button primary" href={`/order/${order.accessToken}`}>{t("order")}</Link>
               </RecordDisclosure>
             ))}
@@ -203,6 +208,7 @@ export default async function OrdersPage({
                 <th className="hidden xl:table-cell">{t("items")}</th>
                 <th>{t("total")}</th>
                 <th>{t("status")}</th>
+                <th>{branchText("selectedBranch")}</th>
                 <th className="hidden lg:table-cell">{t("date")}</th>
               </tr>
             </thead>
@@ -237,6 +243,9 @@ export default async function OrdersPage({
                       </select>
                       <button className="px-2 bg-slate-800 text-white rounded">✓</button>
                     </form>
+                  </td>
+                  <td className="block md:table-cell py-2 md:py-4" data-label={branchText("selectedBranch")}>
+                    {order.branch?.name ?? "—"}
                   </td>
                   <td className="block md:table-cell py-2 md:py-4 lg:table-cell" data-label={t("date")}>
                     {new Intl.DateTimeFormat(locale, {

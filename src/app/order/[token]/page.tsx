@@ -36,7 +36,7 @@ export default async function OrderTrackingPage({
 }) {
   const { token } = await params;
   const { result } = await searchParams;
-  const [session, t, flow, deliveryText, reviewText, mapsText, promotionText, locale, order] = await Promise.all([
+  const [session, t, flow, deliveryText, reviewText, mapsText, promotionText, branchText, locale, order] = await Promise.all([
     auth(),
     getTranslations("orderTracking"),
     getTranslations("launchPolish.orders"),
@@ -44,6 +44,7 @@ export default async function OrderTrackingPage({
     getTranslations("restaurantWorkflow.reviews"),
     getTranslations("maps"),
     getTranslations("promotions.checkout"),
+    getTranslations("branches"),
     getLocale(),
     prisma.order.findUnique({
       where: { accessToken: token },
@@ -59,6 +60,14 @@ export default async function OrderTrackingPage({
             currency: true,
             products: { where: { isAvailable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, nameAr: true, price: true, optionGroups:{select:{group:{select:{options:{select:{option:{select:{id:true,name:true,nameAr:true,priceAdjustment:true,isAvailable:true}}}}}}}} } },
             drivers:{orderBy:{name:"asc"},select:{id:true,name:true,status:true}},
+          },
+        },
+        branch: {
+          select: {
+            name: true,
+            slug: true,
+            phone: true,
+            address: true,
           },
         },
         items: { select: { id: true, productId:true, productName: true, unitPrice: true, quantity: true, notes: true, isComplimentary: true, product:{select:{images:{orderBy:{sortOrder:"asc"},take:1,select:{url:true}}}}, extras: { select: { id: true, name: true, price: true, extraId:true } },options:{select:{id:true,name:true,price:true,optionId:true}} } },
@@ -574,6 +583,7 @@ export default async function OrderTrackingPage({
             <div>
               <small>{restaurantName}</small>
               <h1>{t("title", { number: order.orderNumber })}</h1>
+              {order.branch && <p><b>{branchText("selectedBranch")}:</b> {order.branch.name}</p>}
               <p>{t("subtitle")}</p>
             </div>
           </div>
