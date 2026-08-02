@@ -5,6 +5,7 @@ import { revalidateTag } from "next/cache";
 import { apiError, logApiError } from "@/lib/api";
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
+import { featureLimit } from "@/lib/subscription-plans";
 
 export const runtime = "nodejs";
 
@@ -111,6 +112,18 @@ export async function POST(request: Request) {
           product.id,
         );
     });
+    const importKeys = new Set(productMap.keys());
+    let newProductCount = 0;
+    for (const row of parsed.rows) {
+      const key = productMatchKey(row.categoryEn, row.nameEn);
+      if (!importKeys.has(key)) {
+        importKeys.add(key);
+        newProductCount++;
+      }
+    }
+    const productLimit = await featureLimit(restaurantId, "PRODUCT_LIMIT");
+    if (productLimit !== null && productLimit >= 0 && products.length + newProductCount > productLimit)
+      return apiError("PLAN_PRODUCT_LIMIT", 403, { limit: productLimit });
     let created = 0;
     let updated = 0;
     await prisma.$transaction(

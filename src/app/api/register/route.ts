@@ -8,6 +8,7 @@ import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeE164 } from "@/lib/whatsapp";
 import { verifyOtpVerificationProof } from "@/lib/otp";
 import { z } from "zod";
+import { createInitialSubscription } from "@/lib/subscription-plans";
 
 const verifiedRegistrationSchema = registerSchema.extend({
   otpVerificationToken: z.string().min(20),
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
           where: { id: existing.id },
           data: { phone, phoneVerifiedAt: new Date() },
         });
-      await tx.restaurant.create({
+      const restaurant = await tx.restaurant.create({
         data: {
           name: data.restaurantName,
           slug: data.slug,
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
           },
         },
       });
+      await createInitialSubscription(tx, restaurant.id);
       return user;
     });
     console.info(JSON.stringify({

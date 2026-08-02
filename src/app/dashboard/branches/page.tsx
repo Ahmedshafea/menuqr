@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { BranchDeleteButton } from "@/components/branch-delete-button";
 import { RestaurantQr } from "@/components/restaurant-qr";
+import { featureLimit } from "@/lib/subscription-plans";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,11 @@ export default async function BranchesPage({
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   const { restaurantId } = await requireTenant();
+  const [branchLimit, branchCount] = await Promise.all([
+    featureLimit(restaurantId, "BRANCH_LIMIT"),
+    prisma.branch.count({ where: { restaurantId } }),
+  ]);
+  const canCreateBranch = branchLimit === null || branchLimit < 0 || branchCount < branchLimit;
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const take = 12;
@@ -73,10 +79,10 @@ export default async function BranchesPage({
           <h1>{t("title")}</h1>
           <p>{t("subtitle")}</p>
         </div>
-        <Link href="/dashboard/branches/new" className="button primary">
+        {canCreateBranch && <Link href="/dashboard/branches/new" className="button primary">
           <Plus />
           {t("add")}
-        </Link>
+        </Link>}
       </header>
       <article className="dash-card management-card">
         <form className="management-toolbar">
@@ -146,9 +152,9 @@ export default async function BranchesPage({
         ) : (
           <div className="friendly-empty">
             <h2>{t("empty")}</h2>
-            <Link href="/dashboard/branches/new" className="button primary">
+            {canCreateBranch && <Link href="/dashboard/branches/new" className="button primary">
               {t("add")}
-            </Link>
+            </Link>}
           </div>
         )}
         {pages > 1 && (

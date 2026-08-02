@@ -4,6 +4,7 @@ import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { isDemoSlug } from "@/lib/demo-restaurants";
+import { hasFeature } from "@/lib/subscription-plans";
 
 const schema = z.object({
   slug: z.string().min(1).max(60),
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
       select: { id: true },
     });
     if (!restaurant) return apiError("RESTAURANT_NOT_FOUND", 404);
+    if (!(await hasFeature(restaurant.id, "ANALYTICS_BASIC")))
+      return new Response(null, { status: 204 });
     await prisma.analyticsEvent.create({
       data: { restaurantId: restaurant.id, type: parsed.data.type },
     });

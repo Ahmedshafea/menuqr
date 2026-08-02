@@ -7,6 +7,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { CloseDetailsButton } from "@/components/close-details-button";
+import { featureLimit } from "@/lib/subscription-plans";
 export const dynamic = "force-dynamic";
 export default async function TeamPage({
   searchParams,
@@ -15,7 +16,7 @@ export default async function TeamPage({
 }) {
   const { restaurantId } = await requireTenant();
   const { result, page: pageParam } = await searchParams; const page = Math.max(1, Number(pageParam) || 1); const take = 25;
-  const [t, common, members, total] = await Promise.all([
+  const [t, common, members, total, memberLimit] = await Promise.all([
     getTranslations("team"),
     getTranslations("common"),
     prisma.restaurantMember.findMany({
@@ -29,10 +30,18 @@ export default async function TeamPage({
       skip: (page - 1) * take, take,
     }),
     prisma.restaurantMember.count({ where: { restaurantId } }),
+    featureLimit(restaurantId, "TEAM_MEMBER_LIMIT"),
   ]);
+  const canAddMember = memberLimit === null || memberLimit < 0 || total < memberLimit;
   async function addMember(form: FormData) {
     "use server";
     const { restaurantId } = await requireTenant();
+    const [limit, currentCount] = await Promise.all([
+      featureLimit(restaurantId, "TEAM_MEMBER_LIMIT"),
+      prisma.restaurantMember.count({ where: { restaurantId } }),
+    ]);
+    if (limit !== null && limit >= 0 && currentCount >= limit)
+      redirect("/dashboard/subscription?required=TEAM_MEMBER_LIMIT");
     const name = String(form.get("name") || "").trim();
     const email = String(form.get("email") || "")
       .trim()
@@ -64,7 +73,7 @@ export default async function TeamPage({
           <h1>{t("title")}</h1>
           <p>{t("subtitle")}</p>
         </div>
-        <details className="product-create">
+        {canAddMember && <details className="product-create">
           <summary className="button primary">
             <Plus />
             {t("invite")}
@@ -88,7 +97,7 @@ export default async function TeamPage({
               <button className="button primary full">{t("addMember")}</button>
             </form>
           </div>
-        </details>
+        </details>}
       </header>
       {result === "created" && <p className="form-success">{t("created")}</p>}
       {result === "exists" && <p className="form-error">{t("exists")}</p>}

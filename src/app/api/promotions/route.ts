@@ -3,11 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { apiError } from "@/lib/api";
 import { promotionInputSchema } from "@/lib/promotion-validation";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const { restaurantId } = await requireTenant();
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const url = new URL(request.url);
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const take = Math.min(50, Math.max(10, Number(url.searchParams.get("take")) || 20));
@@ -72,6 +76,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const { restaurantId } = await requireTenant();
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const parsed = promotionInputSchema.safeParse(
     await request.json().catch(() => null),
   );
@@ -137,7 +143,7 @@ export async function POST(request: Request) {
         stackingRule: input.stackingRule,
         priority: input.priority,
         exclusive: input.exclusive,
-        isActive: input.isActive,
+        isActive: input.status === "ACTIVE",
         status: input.status,
         products: { create: products.map(({ id }) => ({ productId: id })) },
         categories: { create: categories.map(({ id }) => ({ categoryId: id })) },
@@ -156,6 +162,8 @@ export async function POST(request: Request) {
       },
       select: { id: true },
     });
+    revalidateTag("public-menu");
+    revalidatePath("/menu", "layout");
     return Response.json(promotion, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")

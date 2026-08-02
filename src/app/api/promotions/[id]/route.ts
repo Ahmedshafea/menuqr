@@ -3,12 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { apiError } from "@/lib/api";
 import { promotionInputSchema } from "@/lib/promotion-validation";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const [{ restaurantId }, { id }] = await Promise.all([requireTenant(), params]);
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const promotion = await prisma.promotion.findFirst({
     where: { id, restaurantId },
     include: {
@@ -28,6 +32,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const [{ restaurantId }, { id }] = await Promise.all([requireTenant(), params]);
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const parsed = promotionInputSchema.safeParse(
     await request.json().catch(() => null),
   );
@@ -114,7 +120,7 @@ export async function PATCH(
           stackingRule: input.stackingRule,
           priority: input.priority,
           exclusive: input.exclusive,
-          isActive: input.isActive,
+          isActive: input.status === "ACTIVE",
           status: input.status,
           archivedAt: input.status === "ARCHIVED" ? new Date() : null,
           products: { create: products.map(({ id: productId }) => ({ productId })) },
@@ -145,6 +151,8 @@ export async function PATCH(
         },
       });
     });
+    revalidateTag("public-menu");
+    revalidatePath("/menu", "layout");
     return Response.json({ ok: true });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
@@ -158,6 +166,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const [{ restaurantId }, { id }] = await Promise.all([requireTenant(), params]);
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const promotion = await prisma.promotion.findFirst({
     where: { id, restaurantId },
     select: { id: true, _count: { select: { usages: true } } },
@@ -169,5 +179,7 @@ export async function DELETE(
       data: { status: "ARCHIVED", isActive: false, archivedAt: new Date() },
     });
   else await prisma.promotion.delete({ where: { id } });
+  revalidateTag("public-menu");
+  revalidatePath("/menu", "layout");
   return Response.json({ ok: true });
 }

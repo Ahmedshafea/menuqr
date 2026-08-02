@@ -13,6 +13,7 @@ import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { isDemoSlug } from "@/lib/demo-restaurants";
 import { calculateOrderPricing } from "@/lib/order-pricing";
 import { sendOrderCreatedNotifications } from "@/lib/whatsapp";
+import { hasFeature } from "@/lib/subscription-plans";
 import { calculatePromotions } from "@/lib/promotion-engine";
 import {
   getPromotionCandidates,
@@ -398,7 +399,7 @@ export async function POST(request: Request) {
       timeStyle: "short",
       timeZone: "Africa/Cairo",
     }).format(order.createdAt);
-    await sendOrderCreatedNotifications({
+    if (await hasFeature(restaurant.id, "WHATSAPP_ORDERS")) await sendOrderCreatedNotifications({
       orderId: order.id,
       orderAccessToken: accessToken,
       orderNumber: number,

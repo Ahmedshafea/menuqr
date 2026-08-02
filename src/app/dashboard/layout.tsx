@@ -11,11 +11,12 @@ import { prisma } from "@/lib/prisma";
 import { RestaurantNotificationCenter } from "@/components/restaurant-notification-center";
 
 import { DashboardWrapper } from "@/components/dashboard-wrapper";
+import { ensureRestaurantSubscription } from "@/lib/subscription-plans";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const [t, notificationsText, notifications] = await Promise.all([
+  const [t, notificationsText, notifications, subscription] = await Promise.all([
     getTranslations("dashboard"),
     getTranslations("mvpPolish.notifications"),
     session.user.restaurantId
@@ -38,6 +39,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           },
         })
       : Promise.resolve([]),
+    session.user.restaurantId
+      ? ensureRestaurantSubscription(session.user.restaurantId)
+      : Promise.resolve(null),
   ]);
   const notificationItems = notifications.map(({ reads, createdAt, ...item }) => ({
     ...item,
@@ -72,7 +76,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <DashboardWrapper
       brand={brand}
       notifications={notificationCenter}
-      sidebar={<DashboardSidebar />}
+      sidebar={<DashboardSidebar features={subscription?.plan.features.map((item) => item.feature.key) ?? []} />}
       languageSwitcher={<LanguageSwitcher compact />}
       signOutAction={signOutAction}
       signOutLabel={t("signOut")}
@@ -81,4 +85,3 @@ export default async function DashboardLayout({ children }: { children: React.Re
     </DashboardWrapper>
   );
 }
-

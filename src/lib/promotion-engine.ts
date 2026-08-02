@@ -141,7 +141,7 @@ function localScheduleParts(date: Date, timeZone: string) {
   };
 }
 
-function isScheduled(
+export function isPromotionScheduled(
   promotion: PromotionCandidate,
   now: Date,
   timeZone: string,
@@ -168,19 +168,22 @@ function isScheduled(
   return true;
 }
 
+export function promotionTargetsLine(
+  promotion: PromotionCandidate,
+  line: Pick<PromotionCartLine, "productId" | "categoryId">,
+) {
+  if (promotion.targetType === "PRODUCT")
+    return Boolean(promotion.productIds?.includes(line.productId));
+  if (promotion.targetType === "CATEGORY")
+    return Boolean(promotion.categoryIds?.includes(line.categoryId));
+  return true;
+}
+
 function targetedLines(
   promotion: PromotionCandidate,
   lines: PromotionCartLine[],
 ) {
-  if (promotion.targetType === "PRODUCT")
-    return lines.filter((line) =>
-      promotion.productIds?.includes(line.productId),
-    );
-  if (promotion.targetType === "CATEGORY")
-    return lines.filter((line) =>
-      promotion.categoryIds?.includes(line.categoryId),
-    );
-  return lines;
+  return lines.filter((line) => promotionTargetsLine(promotion, line));
 }
 
 function couponForPromotion(
@@ -246,7 +249,8 @@ function calculateCandidate(
   else if (promotion.type === "BUY_X_GET_Y") {
     const buy = Math.max(1, promotion.buyQuantity || 1);
     const get = Math.max(1, promotion.getQuantity || 1);
-    const freeUnits = Math.floor(targetQuantity / (buy + get)) * get;
+    // X is the qualifying quantity shown in the form. Y of every X units are free.
+    const freeUnits = Math.floor(targetQuantity / buy) * Math.min(get, buy);
     const unitPrices = lines
       .flatMap((line) =>
         Array.from(
@@ -317,7 +321,7 @@ export function calculatePromotions(
     if (
       !promotion.isActive ||
       promotion.status !== "ACTIVE" ||
-      !isScheduled(promotion, now, context.timeZone || "Africa/Cairo") ||
+      !isPromotionScheduled(promotion, now, context.timeZone || "Africa/Cairo") ||
       (promotion.totalUsageLimit != null &&
         (promotion.usageCount || 0) >= promotion.totalUsageLimit) ||
       (promotion.perCustomerLimit != null &&

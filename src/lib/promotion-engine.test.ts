@@ -51,9 +51,9 @@ describe("promotion engine", () => {
       ],
       {
         ...context,
-        subtotal: 300,
+        subtotal: 200,
         lines: [
-          { productId: "p1", categoryId: "c1", unitPrice: 100, quantity: 3 },
+          { productId: "p1", categoryId: "c1", unitPrice: 100, quantity: 2 },
         ],
       },
     );

@@ -24,6 +24,10 @@ export type BranchFormValue = {
   address: string;
   city: string;
   state: string;
+  governorate: string;
+  district: string;
+  area: string;
+  street: string;
   country: string;
   postalCode: string;
   latitude: number | null;
@@ -50,6 +54,10 @@ const emptyBranch: BranchFormValue = {
   address: "",
   city: "",
   state: "",
+  governorate: "",
+  district: "",
+  area: "",
+  street: "",
   country: "Egypt",
   postalCode: "",
   latitude: null,
@@ -237,15 +245,41 @@ export function BranchForm({
           <label>
             {t("city")}
             <input
+              required
               value={value.city}
               onChange={(event) => set("city", event.target.value)}
             />
           </label>
           <label>
-            {t("state")}
+            {t("governorate")}
             <input
-              value={value.state}
-              onChange={(event) => set("state", event.target.value)}
+              required
+              value={value.governorate}
+              onChange={(event) => set("governorate", event.target.value)}
+            />
+          </label>
+          <label>
+            {t("district")}
+            <input
+              required
+              value={value.district}
+              onChange={(event) => set("district", event.target.value)}
+            />
+          </label>
+          <label>
+            {t("area")}
+            <input
+              required
+              value={value.area}
+              onChange={(event) => set("area", event.target.value)}
+            />
+          </label>
+          <label>
+            {t("street")}
+            <input
+              required
+              value={value.street}
+              onChange={(event) => set("street", event.target.value)}
             />
           </label>
           <label>
@@ -282,6 +316,10 @@ export function BranchForm({
                   address: current.address || address,
                   city: current.city || details.city || "",
                   state: current.state || details.governorate || "",
+                  governorate: current.governorate || details.governorate || "",
+                  district: current.district || details.district || "",
+                  area: current.area || details.area || "",
+                  street: current.street || details.street || "",
                   country: current.country || details.country || "",
                   postalCode: current.postalCode || details.postalCode || "",
                 }))

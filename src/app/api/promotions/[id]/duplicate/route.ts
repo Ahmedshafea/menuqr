@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { apiError } from "@/lib/api";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const [{ restaurantId }, { id }] = await Promise.all([requireTenant(), params]);
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const source = await prisma.promotion.findFirst({
     where: { id, restaurantId },
     include: {
@@ -56,5 +60,7 @@ export async function POST(
     },
     select: { id: true },
   });
+  revalidateTag("public-menu");
+  revalidatePath("/menu", "layout");
   return Response.json(copy, { status: 201 });
 }

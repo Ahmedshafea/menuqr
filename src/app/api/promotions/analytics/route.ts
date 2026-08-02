@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
+import { apiError } from "@/lib/api";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export async function GET(request: Request) {
   const { restaurantId } = await requireTenant();
+  if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+    return apiError("FEATURE_NOT_AVAILABLE", 403);
   const url = new URL(request.url);
   const days = Math.min(365, Math.max(7, Number(url.searchParams.get("days")) || 30));
   const since = new Date(Date.now() - days * 86_400_000);

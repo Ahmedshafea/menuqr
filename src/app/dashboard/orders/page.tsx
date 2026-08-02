@@ -7,6 +7,7 @@ import type { OrderStatus, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
 import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
+import { hasFeature } from "@/lib/subscription-plans";
 import { applicationUrl, publicOrderUrl } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 const statuses = [
@@ -129,7 +130,7 @@ export default async function OrdersPage({
         });
       return true;
     });
-    if (changed)
+    if (changed && await hasFeature(restaurantId, "WHATSAPP_ORDERS"))
       await sendOrderStatusNotification({
         orderId: order.id,
         status: next,
@@ -142,7 +143,7 @@ export default async function OrdersPage({
         customerOrderUrl: publicOrderUrl(order.accessToken),
         language: restaurant.locale === "ar" ? "ar" : "en",
       });
-    if (changed && next === "COMPLETED")
+    if (changed && next === "COMPLETED" && await hasFeature(restaurantId, "REVIEWS") && await hasFeature(restaurantId, "WHATSAPP_ORDERS"))
       await sendReviewRequest({
         orderId: order.id,
         orderNumber: order.orderNumber,

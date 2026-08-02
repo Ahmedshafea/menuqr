@@ -9,12 +9,14 @@ export function FormWizard({
   previousLabel,
   nextLabel,
   finishLabel,
+  onFinish,
 }: {
   children: ReactNode;
   stepTitles: string[];
   previousLabel: string;
   nextLabel: string;
   finishLabel: string;
+  onFinish?: () => void;
 }) {
   const steps = Children.toArray(children);
   const [current, setCurrent] = useState(0);
@@ -56,7 +58,11 @@ export function FormWizard({
             {nextLabel}<ChevronRight />
           </button>
         ) : (
-          <button type="submit" className="button primary">
+          <button
+            type={onFinish ? "button" : "submit"}
+            className="button primary"
+            onClick={onFinish}
+          >
             {finishLabel}
           </button>
         )}

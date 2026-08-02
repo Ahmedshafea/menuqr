@@ -3,9 +3,12 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { PromotionForm, type PromotionDraft } from "@/components/promotion-form";
+import { DashboardFormModal } from "@/components/dashboard-form-modal";
+import { hasFeature } from "@/lib/subscription-plans";
+import { redirect } from "next/navigation";
 
 const dateInput = (value: Date | null) =>
-  value ? new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : "";
+  value ? new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 10) : "";
 
 export default async function EditPromotionPage({ params }: { params: Promise<{ id: string }> }) {
   const [{ restaurantId }, { id }, locale, t] = await Promise.all([
@@ -14,6 +17,7 @@ export default async function EditPromotionPage({ params }: { params: Promise<{ 
     getLocale(),
     getTranslations("promotions.form"),
   ]);
+  if (!(await hasFeature(restaurantId, "PROMOTIONS"))) redirect("/dashboard/subscription?required=PROMOTIONS");
   const [promotion, products, categories, branches] = await Promise.all([
     prisma.promotion.findFirst({
       where: { id, restaurantId },
@@ -75,5 +79,5 @@ export default async function EditPromotionPage({ params }: { params: Promise<{ 
     })),
   };
   const localize = (item: { id: string; name: string; nameAr?: string | null }) => ({ id: item.id, name: locale === "ar" && item.nameAr ? item.nameAr : item.name });
-  return <section className="dash-main"><header><div><h1>{t("editTitle")}</h1></div></header><PromotionForm promotionId={id} initial={initial} products={products.map(localize)} categories={categories.map(localize)} branches={branches} /></section>;
+  return <section className="dash-main"><header><div><h1>{t("editTitle")}</h1></div></header><DashboardFormModal title={t("editTitle")} closeHref="/dashboard/promotions"><PromotionForm promotionId={id} initial={initial} products={products.map(localize)} categories={categories.map(localize)} branches={branches} /></DashboardFormModal></section>;
 }
