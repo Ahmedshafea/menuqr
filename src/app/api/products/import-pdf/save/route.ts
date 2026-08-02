@@ -4,6 +4,7 @@ import { apiError, logApiError } from "@/lib/api";
 import { normalizePdfMenu, pdfMenuSchema } from "@/lib/pdf-menu-import";
 import { prisma } from "@/lib/prisma";
 import { productMatchKey } from "@/lib/product-import";
+import { featureLimit, hasFeature } from "@/lib/subscription-plans";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
   const restaurantId = session?.user.restaurantId;
   if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
     return apiError("UNAUTHORIZED", 401);
+  if (!(await hasFeature(restaurantId, "PDF_IMPORT"))) return apiError("FEATURE_NOT_AVAILABLE", 403);
   const parsed = pdfMenuSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return apiError("INVALID_IMPORT_DATA", 422, parsed.error.flatten());
   try {
@@ -27,6 +29,20 @@ export async function POST(request: Request) {
       if (product.category.nameAr && product.nameAr) keys.push(productMatchKey(product.category.nameAr, product.nameAr));
       return keys;
     }));
+    const incomingKeys = new Set(productKeys);
+    let newProductCount = 0;
+    for (const category of menu.categories) {
+      for (const item of category.items) {
+        const key = productMatchKey(category.name, item.name);
+        if (!incomingKeys.has(key)) {
+          incomingKeys.add(key);
+          newProductCount++;
+        }
+      }
+    }
+    const productLimit = await featureLimit(restaurantId, "PRODUCT_LIMIT");
+    if (productLimit !== null && productLimit >= 0 && existingProducts.length + newProductCount > productLimit)
+      return apiError("PLAN_PRODUCT_LIMIT", 403, { limit: productLimit });
     let createdCategories = 0;
     let createdProducts = 0;
     let skippedProducts = 0;
@@ -72,4 +88,3 @@ export async function POST(request: Request) {
     return apiError("PDF_IMPORT_SAVE_FAILED", 500);
   }
 }
-

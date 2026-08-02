@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function PromotionsPage({
     getLocale(),
     getTranslations("promotions"),
   ]);
+  if (!(await hasFeature(restaurantId, "PROMOTIONS"))) redirect("/dashboard/subscription?required=PROMOTIONS");
   const page = Math.max(1, Number(query.page) || 1);
   const take = 20;
   const status = ["DRAFT", "ACTIVE", "PAUSED", "ARCHIVED"].includes(
@@ -83,6 +85,8 @@ export default async function PromotionsPage({
   async function toggle(id: string, enabled: boolean) {
     "use server";
     const { restaurantId } = await requireTenant();
+    if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+      redirect("/dashboard/subscription?required=PROMOTIONS");
     await prisma.promotion.updateMany({
       where: { id, restaurantId, status: { not: "ARCHIVED" } },
       data: {
@@ -91,10 +95,14 @@ export default async function PromotionsPage({
       },
     });
     revalidatePath("/dashboard/promotions");
+    revalidateTag("public-menu");
+    revalidatePath("/menu", "layout");
   }
   async function remove(id: string) {
     "use server";
     const { restaurantId } = await requireTenant();
+    if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+      redirect("/dashboard/subscription?required=PROMOTIONS");
     const promotion = await prisma.promotion.findFirst({
       where: { id, restaurantId },
       select: { id: true, _count: { select: { usages: true } } },
@@ -107,10 +115,14 @@ export default async function PromotionsPage({
       });
     else await prisma.promotion.delete({ where: { id } });
     revalidatePath("/dashboard/promotions");
+    revalidateTag("public-menu");
+    revalidatePath("/menu", "layout");
   }
   async function duplicate(id: string) {
     "use server";
     const { restaurantId } = await requireTenant();
+    if (!(await hasFeature(restaurantId, "PROMOTIONS")))
+      redirect("/dashboard/subscription?required=PROMOTIONS");
     const source = await prisma.promotion.findFirst({
       where: { id, restaurantId },
       include: {
@@ -227,7 +239,7 @@ export default async function PromotionsPage({
             <div className="promotion-actions">
               <Link className="button ghost" href={`/dashboard/promotions/${promotion.id}`}>{t("edit")}</Link>
               <form action={duplicate.bind(null, promotion.id)}><button className="button ghost">{t("duplicate")}</button></form>
-              {promotion.status !== "ARCHIVED" && <form action={toggle.bind(null, promotion.id, !promotion.isActive)}><button className="button ghost">{promotion.isActive ? t("disable") : t("enable")}</button></form>}
+              {promotion.status !== "ARCHIVED" && <form action={toggle.bind(null, promotion.id, promotion.status !== "ACTIVE")}><button className={promotion.status === "ACTIVE" ? "button ghost" : "button primary"}>{promotion.status === "ACTIVE" ? t("disable") : t("activate")}</button></form>}
               <form action={remove.bind(null, promotion.id)}><button className="button danger">{promotion.usageCount ? t("archive") : t("delete")}</button></form>
             </div>
           </article>

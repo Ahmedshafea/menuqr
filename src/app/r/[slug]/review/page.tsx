@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { createRestaurantNotification } from "@/lib/restaurant-notifications";
 import { ReviewForm } from "@/components/review-form";
+import { hasFeature } from "@/lib/subscription-plans";
 import Image from "next/image";
 import { getLocale, getTranslations } from "next-intl/server";
 
@@ -49,7 +50,10 @@ export default async function RestaurantReviewFormPage({
       },
     },
   });
-  if (!restaurant?.settings?.reviewsEnabled) notFound();
+  if (
+    !restaurant?.settings?.reviewsEnabled ||
+    !(await hasFeature(restaurant.id, "REVIEWS"))
+  ) notFound();
   const currentRestaurant = restaurant;
   const arabic = locale === "ar";
 

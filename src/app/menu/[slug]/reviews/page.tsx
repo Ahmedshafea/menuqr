@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export const revalidate = 60;
 
@@ -63,7 +64,10 @@ export default async function Reviews({
       settings: { select: { reviewsEnabled: true } },
     },
   });
-  if (!restaurant?.settings?.reviewsEnabled) notFound();
+  if (
+    !restaurant?.settings?.reviewsEnabled ||
+    !(await hasFeature(restaurant.id, "REVIEWS"))
+  ) notFound();
 
   const where = {
     restaurantId: restaurant.id,

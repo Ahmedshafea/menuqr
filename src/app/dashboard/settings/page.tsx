@@ -1,5 +1,4 @@
 import { revalidatePath, revalidateTag } from "next/cache";
-import { Save } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
@@ -7,12 +6,14 @@ import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { RestaurantQr } from "@/components/restaurant-qr";
 import { redirect } from "next/navigation";
 import { NotificationPreferences } from "@/components/notification-preferences";
-import LocationField from "@/components/map/LocationField";
-import { AccordionSection } from "@/components/accordion-section";
+import { RestaurantLocationFields } from "@/components/restaurant-location-fields";
+import { DashboardFormModal } from "@/components/dashboard-form-modal";
+import { FormWizard } from "@/components/form-wizard";
+import { hasFeature } from "@/lib/subscription-plans";
 export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const { restaurantId } = await requireTenant();
-  const [t, common, qr, polish, mvp, notifications, fulfillment, pricing, maps, restaurant] = await Promise.all([
+  const [t, common, qr, polish, mvp, notifications, fulfillment, pricing, restaurant, reviewsAvailable] = await Promise.all([
     getTranslations("settings"),
     getTranslations("common"),
     getTranslations("qr"),
@@ -21,18 +22,19 @@ export default async function SettingsPage() {
     getTranslations("mvpPolish.notifications"),
     getTranslations("restaurantWorkflow.settings"),
     getTranslations("pricingSettings"),
-    getTranslations("maps"),
     prisma.restaurant.findUniqueOrThrow({
       where: { id: restaurantId },
       include: {
         settings: true,
       },
     }),
+    hasFeature(restaurantId, "REVIEWS"),
   ]);
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}`;
   async function save(form: FormData) {
     "use server";
     const { restaurantId } = await requireTenant();
+    const reviewsFeatureEnabled = await hasFeature(restaurantId, "REVIEWS");
     const logo = form.get("logo");
     const cover = form.get("cover");
     const [uploadedLogo, uploadedCover] = await Promise.all([
@@ -53,6 +55,14 @@ export default async function SettingsPage() {
     ]);
     const name = String(form.get("name") || "").trim();
     const address = String(form.get("address") || "").trim();
+    const structuredAddress = {
+      governorate: String(form.get("governorate") || "").trim(),
+      city: String(form.get("city") || "").trim(),
+      district: String(form.get("district") || "").trim(),
+      area: String(form.get("area") || "").trim(),
+      street: String(form.get("street") || "").trim(),
+      postalCode: String(form.get("postalCode") || "").trim(),
+    };
     const coordinate = (name: string, min: number, max: number) => {
       const raw = String(form.get(name) || "").trim();
       if (!raw) return null;
@@ -67,6 +77,19 @@ export default async function SettingsPage() {
         ? Math.min(100, value)
         : value;
     };
+    const latitude = coordinate("latitude", -90, 90);
+    const longitude = coordinate("longitude", -180, 180);
+    if (
+      !address ||
+      !structuredAddress.governorate ||
+      !structuredAddress.city ||
+      !structuredAddress.district ||
+      !structuredAddress.area ||
+      !structuredAddress.street ||
+      latitude == null ||
+      longitude == null
+    )
+      throw new Error("INVALID_RESTAURANT_LOCATION");
     await prisma.$transaction(async (tx) => {
       await tx.restaurant.update({
         where: { id: restaurantId },
@@ -78,9 +101,15 @@ export default async function SettingsPage() {
           phone: String(form.get("phone") || "").trim() || null,
           whatsapp: String(form.get("whatsapp") || "").replace(/\D/g, ""),
           address: address || null,
+          governorate: structuredAddress.governorate,
+          city: structuredAddress.city,
+          district: structuredAddress.district,
+          area: structuredAddress.area,
+          street: structuredAddress.street,
+          postalCode: structuredAddress.postalCode || null,
           mapUrl: null,
-          latitude: coordinate("latitude", -90, 90),
-          longitude: coordinate("longitude", -180, 180),
+          latitude,
+          longitude,
           facebookUrl: String(form.get("facebookUrl") || "").trim() || null,
           instagramUrl: String(form.get("instagramUrl") || "").trim() || null,
           currency: String(form.get("currency") || "EGP"),
@@ -100,6 +129,15 @@ export default async function SettingsPage() {
             name,
             slug: "main",
             address,
+            governorate: structuredAddress.governorate,
+            state: structuredAddress.governorate,
+            city: structuredAddress.city,
+            district: structuredAddress.district,
+            area: structuredAddress.area,
+            street: structuredAddress.street,
+            postalCode: structuredAddress.postalCode || null,
+            latitude,
+            longitude,
             workingHours: {
               create: Array.from({ length: 7 }, (_, dayOfWeek) => ({
                 dayOfWeek,
@@ -129,11 +167,11 @@ export default async function SettingsPage() {
           serviceFeeType: adjustmentType("serviceFeeType"),
           taxRate: adjustmentValue("taxRate", "taxType"),
           taxType: adjustmentType("taxType"),
-          reviewsEnabled: form.get("reviewsEnabled") === "on",
-          reviewImagesEnabled: form.get("reviewImagesEnabled") === "on",
-          anonymousReviewsEnabled: form.get("anonymousReviewsEnabled") === "on",
-          requireCompletedOrderForReview: form.get("requireCompletedOrderForReview") === "on",
-          autoPublishReviews: form.get("autoPublishReviews") === "on",
+          reviewsEnabled: reviewsFeatureEnabled && form.get("reviewsEnabled") === "on",
+          reviewImagesEnabled: reviewsFeatureEnabled && form.get("reviewImagesEnabled") === "on",
+          anonymousReviewsEnabled: reviewsFeatureEnabled && form.get("anonymousReviewsEnabled") === "on",
+          requireCompletedOrderForReview: reviewsFeatureEnabled && form.get("requireCompletedOrderForReview") === "on",
+          autoPublishReviews: reviewsFeatureEnabled && form.get("autoPublishReviews") === "on",
         },
         update: {
           allowOrdering: form.get("allowOrdering") === "on",
@@ -151,11 +189,11 @@ export default async function SettingsPage() {
           serviceFeeType: adjustmentType("serviceFeeType"),
           taxRate: adjustmentValue("taxRate", "taxType"),
           taxType: adjustmentType("taxType"),
-          reviewsEnabled: form.get("reviewsEnabled") === "on",
-          reviewImagesEnabled: form.get("reviewImagesEnabled") === "on",
-          anonymousReviewsEnabled: form.get("anonymousReviewsEnabled") === "on",
-          requireCompletedOrderForReview: form.get("requireCompletedOrderForReview") === "on",
-          autoPublishReviews: form.get("autoPublishReviews") === "on",
+          reviewsEnabled: reviewsFeatureEnabled && form.get("reviewsEnabled") === "on",
+          reviewImagesEnabled: reviewsFeatureEnabled && form.get("reviewImagesEnabled") === "on",
+          anonymousReviewsEnabled: reviewsFeatureEnabled && form.get("anonymousReviewsEnabled") === "on",
+          requireCompletedOrderForReview: reviewsFeatureEnabled && form.get("requireCompletedOrderForReview") === "on",
+          autoPublishReviews: reviewsFeatureEnabled && form.get("autoPublishReviews") === "on",
         },
       });
     });
@@ -173,7 +211,14 @@ export default async function SettingsPage() {
           <p>{t("subtitle")}</p>
         </div>
       </header>
+      <DashboardFormModal title={t("title")} closeHref="/dashboard">
       <form action={save} className="dash-card settings-form">
+        <FormWizard
+          stepTitles={[t("profile"), t("ordering"), pricing("title"), notifications("title"), ...(reviewsAvailable ? [restaurant.locale === "ar" ? "إعدادات التقييمات" : "Review settings"] : []), qr("sectionTitle")]}
+          previousLabel={common("previous")}
+          nextLabel={common("next")}
+          finishLabel={common("save")}
+        >
         <div className="restaurant-media">
           {restaurant.coverUrl && (
             <div
@@ -188,7 +233,7 @@ export default async function SettingsPage() {
             />
           )}
         </div>
-        <AccordionSection title={t("profile")} className="settings-section">
+        <section className="settings-section">
           <div className="settings-grid">
             <label>
               {t("logo")}
@@ -245,21 +290,19 @@ export default async function SettingsPage() {
                 defaultValue={restaurant.whatsapp}
               />
             </label>
-            <label className="full">
-              {t("address")}
-              <input
-                name="address"
-                defaultValue={restaurant.address ?? ""}
-              />
-            </label>
-            <div className="full restaurant-location-field">
-              <h3>{maps("title")}</h3>
-              <LocationField
-                initialLat={restaurant.latitude == null ? null : Number(restaurant.latitude)}
-                initialLng={restaurant.longitude == null ? null : Number(restaurant.longitude)}
-                latitudeName="latitude"
-                longitudeName="longitude"
-                autoLocate
+            <div className="full">
+              <RestaurantLocationFields
+                initial={{
+                  address: restaurant.address ?? "",
+                  governorate: restaurant.governorate ?? "",
+                  city: restaurant.city ?? "",
+                  district: restaurant.district ?? "",
+                  area: restaurant.area ?? "",
+                  street: restaurant.street ?? "",
+                  postalCode: restaurant.postalCode ?? "",
+                }}
+                latitude={restaurant.latitude == null ? null : Number(restaurant.latitude)}
+                longitude={restaurant.longitude == null ? null : Number(restaurant.longitude)}
               />
             </div>
             <label>
@@ -279,8 +322,8 @@ export default async function SettingsPage() {
               />
             </label>
           </div>
-        </AccordionSection>
-        <AccordionSection title={t("ordering")} className="settings-section">
+        </section>
+        <section className="settings-section">
           <div className="settings-grid">
             <label className="check-label">
               <input
@@ -321,8 +364,8 @@ export default async function SettingsPage() {
               </select>
             </label>
           </div>
-        </AccordionSection>
-        <AccordionSection title={pricing("title")} className="settings-section">
+        </section>
+        <section className="settings-section">
           <p>{pricing("description")}</p>
           <div className="settings-grid pricing-settings-grid">
             {[
@@ -374,11 +417,11 @@ export default async function SettingsPage() {
               </fieldset>
             ))}
           </div>
-        </AccordionSection>
-        <AccordionSection title={notifications("title")} className="settings-section">
+        </section>
+        <section className="settings-section">
           <NotificationPreferences labels={{browser:notifications("browser"),sound:notifications("sound"),help:notifications("preferencesHelp")}} />
-        </AccordionSection>
-        <AccordionSection title={restaurant.locale === "ar" ? "إعدادات التقييمات" : "Review settings"} className="settings-section">
+        </section>
+        {reviewsAvailable && <section className="settings-section">
           <div className="settings-check-grid">
             {[
               ["reviewsEnabled", restaurant.locale === "ar" ? "تفعيل التقييمات" : "Enable reviews", restaurant.settings?.reviewsEnabled ?? true],
@@ -394,8 +437,8 @@ export default async function SettingsPage() {
             label={restaurant.locale === "ar" ? "امسح الرمز لإضافة تقييم" : "Scan to leave a review"}
             controls={{png:qr("downloadPng"),svg:qr("downloadSvg"),copy:qr("copyLink"),copied:qr("copied"),printA4:mvp("printA4"),printCards:mvp("printCards")}}
           />
-        </AccordionSection>
-        <AccordionSection id="restaurant-qr" title={qr("sectionTitle")} className="settings-section qr-settings-section">
+        </section>}
+        <section id="restaurant-qr" className="settings-section qr-settings-section">
           <p>{qr("sectionHelp")}</p>
           <RestaurantQr
             menuUrl={menuUrl}
@@ -411,12 +454,10 @@ export default async function SettingsPage() {
             }}
           />
           <small>{mvp("futureTables")}</small>
-        </AccordionSection>
-        <button className="button primary">
-          <Save />
-          {common("save")}
-        </button>
+        </section>
+        </FormWizard>
       </form>
+      </DashboardFormModal>
     </section>
   );
 }

@@ -4,12 +4,14 @@ import { AuthForm } from "@/components/auth-form";
 
 export default async function CustomerLoginPage() {
   const t = await getTranslations("auth");
+  const security = await getTranslations("security");
 
   return (
     <div className="auth-box">
       <h1>{t("customerWelcome")}</h1>
       <p>{t("customerLoginSubtitle")}</p>
       <AuthForm mode="login" redirectTo="/account" />
+      <div className="auth-bottom"><Link href="/forgot-password?audience=customer">{security("forgotLink")}</Link></div>
       <div className="auth-bottom">
         {t("restaurantOwner")}{" "}
         <Link href="/login">{t("restaurantLogin")}</Link>

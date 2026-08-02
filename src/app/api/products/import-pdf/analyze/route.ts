@@ -5,6 +5,7 @@ import { extractMenuFromPdf } from "@/lib/gemini-menu-import";
 import { assertPdfFile, MAX_PDF_MENU_BYTES, PDF_IMPORT_BUCKET } from "@/lib/pdf-menu-import";
 import { rateLimit } from "@/lib/rate-limit";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
   const restaurantId = session?.user.restaurantId;
   if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
     return apiError("UNAUTHORIZED", 401);
+  if (!(await hasFeature(restaurantId, "PDF_IMPORT"))) return apiError("FEATURE_NOT_AVAILABLE", 403);
   const limit = rateLimit(`pdf-import-analyze:${restaurantId}`, 3, 15 * 60 * 1000);
   if (!limit.allowed) return rateLimitError(limit.retryAfter);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
@@ -43,4 +45,3 @@ export async function POST(request: Request) {
     await supabase.storage.from(PDF_IMPORT_BUCKET).remove([parsed.data.path]);
   }
 }
-

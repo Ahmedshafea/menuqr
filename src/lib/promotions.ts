@@ -4,6 +4,7 @@ import type {
   AppliedPromotion,
   PromotionCandidate,
 } from "@/lib/promotion-engine";
+import { hasFeature } from "@/lib/subscription-plans";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -18,6 +19,7 @@ export async function getPromotionCandidates(input: {
   client?: DatabaseClient;
 }) {
   const client = input.client || prisma;
+  if (!(await hasFeature(input.restaurantId, "PROMOTIONS", client))) return [];
   const customerFilter = input.customerUserId
     ? { customerUserId: input.customerUserId }
     : input.customerKey

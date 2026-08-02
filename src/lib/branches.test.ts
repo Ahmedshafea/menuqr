@@ -9,6 +9,13 @@ const validBranch = {
   phone: "+2030000000",
   useRestaurantWhatsapp: true,
   address: "Smouha, Alexandria",
+  governorate: "Alexandria",
+  city: "Alexandria",
+  district: "East",
+  area: "Smouha",
+  street: "Fawzi Moaz Street",
+  latitude: 31.2156,
+  longitude: 29.9553,
   workingHours: [],
 };
 
@@ -30,7 +37,7 @@ describe("branch validation", () => {
       branchSchema.safeParse({ ...validBranch, slug: "Smouha Branch" }).success,
     ).toBe(false);
     expect(
-      branchSchema.safeParse({ ...validBranch, latitude: 30.1 }).success,
+      branchSchema.safeParse({ ...validBranch, latitude: 30.1, longitude: undefined }).success,
     ).toBe(false);
   });
 });

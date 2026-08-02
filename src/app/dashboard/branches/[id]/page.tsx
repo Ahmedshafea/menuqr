@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { BranchForm } from "@/components/branch-form";
+import { DashboardFormModal } from "@/components/dashboard-form-modal";
 
 export default async function EditBranchPage({
   params,
@@ -26,7 +27,7 @@ export default async function EditBranchPage({
           <h1>{t("edit")}</h1>
         </div>
       </header>
-      <BranchForm
+      <DashboardFormModal title={t("edit")} closeHref="/dashboard/branches"><BranchForm
         branchId={branch.id}
         initial={{
           name: branch.name,
@@ -39,6 +40,10 @@ export default async function EditBranchPage({
           address: branch.address,
           city: branch.city ?? "",
           state: branch.state ?? "",
+          governorate: branch.governorate ?? branch.state ?? "",
+          district: branch.district ?? "",
+          area: branch.area ?? "",
+          street: branch.street ?? "",
           country: branch.country ?? "",
           postalCode: branch.postalCode ?? "",
           latitude: branch.latitude == null ? null : Number(branch.latitude),
@@ -46,7 +51,7 @@ export default async function EditBranchPage({
           googleMapsUrl: branch.googleMapsUrl ?? "",
           workingHours: branch.workingHours,
         }}
-      />
+      /></DashboardFormModal>
     </section>
   );
 }

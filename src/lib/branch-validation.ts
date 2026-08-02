@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const optionalText = (max: number) =>
   z.string().trim().max(max).optional().transform((value) => value || null);
+const requiredLocationText = (max: number) => z.string().trim().min(1).max(max);
 const optionalPhone = z
   .string()
   .trim()
@@ -47,8 +48,12 @@ export const branchSchema = z
       .transform((value) => value || null)
       .refine((value) => !value || z.email().safeParse(value).success, "INVALID_EMAIL"),
     address: z.string().trim().min(3).max(300),
-    city: optionalText(100),
+    city: requiredLocationText(100),
     state: optionalText(100),
+    governorate: requiredLocationText(100),
+    district: requiredLocationText(100),
+    area: requiredLocationText(100),
+    street: requiredLocationText(150),
     country: optionalText(100),
     postalCode: optionalText(30),
     latitude: z.number().min(-90).max(90).nullable().optional(),
@@ -68,6 +73,12 @@ export const branchSchema = z
         code: "custom",
         path: ["latitude"],
         message: "BOTH_COORDINATES_REQUIRED",
+      });
+    if (value.latitude == null || value.longitude == null)
+      context.addIssue({
+        code: "custom",
+        path: ["latitude"],
+        message: "BRANCH_LOCATION_REQUIRED",
       });
     if (new Set(value.workingHours.map((hour) => hour.dayOfWeek)).size !== value.workingHours.length)
       context.addIssue({

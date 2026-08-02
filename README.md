@@ -287,3 +287,31 @@ the existing ordering flow. Apply it with:
 ```bash
 npm run db:deploy
 ```
+
+## Subscription plans and launch offer
+
+Plans and entitlements are stored in `Plan`, `Feature`, and `PlanFeature`.
+Application code checks stable feature keys through
+`src/lib/subscription-plans.ts`; it does not branch on plan names. The migration
+creates Free, Pro, and Business, seeds their feature mappings, and assigns Free
+to existing restaurants that do not already have a subscription.
+
+The Pro launch trial is controlled from the single `LaunchPromotion` row. It is
+disabled by default. Enable it and set its dates from Prisma Studio or SQL:
+
+```sql
+UPDATE "LaunchPromotion"
+SET "enabled" = true,
+    "startsAt" = '2026-09-01T00:00:00Z',
+    "endsAt" = '2026-09-30T23:59:59Z',
+    "trialDays" = 30
+WHERE "id" = 'launch_pro_2026';
+```
+
+New registrations inside that window receive a time-bounded Pro `TRIALING`
+subscription linked to the launch record. Outside the window they receive the
+permanent Free plan. Apply the schema and seed migration before deployment:
+
+```bash
+npm run db:deploy
+```

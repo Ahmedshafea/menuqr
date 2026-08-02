@@ -723,14 +723,14 @@ export function MenuClient({
                   {deliveryCoordinates.lat != null && deliveryCoordinates.lng != null && <b>{checkoutText("locationSelected")}</b>}
                   {locationMessage && <p className="location-help">{locationMessage}</p>}
                 </section>
-                <details className="checkout-address-details">
+                <details className="checkout-address-details" open>
                   <summary><span>{checkoutText("additionalDetails")}</span><ChevronDown /></summary>
                   <div>
-                    <input name="buildingName" maxLength={120} placeholder={checkoutText("buildingName")} />
-                    <input name="floor" maxLength={30} inputMode="numeric" placeholder={checkoutText("floor")} />
-                    <input name="apartment" maxLength={30} inputMode="numeric" placeholder={checkoutText("apartment")} />
-                    <input name="landmark" maxLength={200} placeholder={checkoutText("landmark")} />
-                    <textarea name="deliveryNotes" maxLength={500} rows={3} placeholder={checkoutText("deliveryNotes")} />
+                    <input name="buildingName" required maxLength={120} placeholder={`${checkoutText("buildingName")} *`} />
+                    <input name="floor" required maxLength={30} inputMode="numeric" placeholder={`${checkoutText("floor")} *`} />
+                    <input name="apartment" required maxLength={30} inputMode="numeric" placeholder={`${checkoutText("apartment")} *`} />
+                    <input name="landmark" required maxLength={200} placeholder={`${checkoutText("landmark")} *`} />
+                    <textarea name="deliveryNotes" required maxLength={500} rows={3} placeholder={`${checkoutText("deliveryNotes")} *`} />
                   </div>
                 </details>
                 {locationOpen && <div className="location-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLocationOpen(false); }}>

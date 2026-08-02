@@ -6,6 +6,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { applicationUrl } from "@/lib/utils";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function ReviewsPage({
     getLocale(),
     getTranslations("reviews.dashboard"),
   ]);
+  if (!(await hasFeature(restaurantId, "REVIEWS"))) redirect("/dashboard/subscription?required=REVIEWS");
   const restaurant = await prisma.restaurant.findUniqueOrThrow({
     where: { id: restaurantId },
     select: { slug: true },
@@ -144,6 +146,8 @@ export default async function ReviewsPage({
   ) {
     "use server";
     const { restaurantId: currentRestaurantId } = await requireTenant();
+    if (!(await hasFeature(currentRestaurantId, "REVIEWS")))
+      redirect("/dashboard/subscription?required=REVIEWS");
     let result = "invalid";
     if (!id) redirect("/dashboard/reviews?result=invalid");
 

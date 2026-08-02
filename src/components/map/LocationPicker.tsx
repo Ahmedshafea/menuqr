@@ -19,6 +19,7 @@ interface LocationPickerProps {
   onAddressResolved?: (address: string, details: {
     street?: string;
     district?: string;
+    area?: string;
     city?: string;
     governorate?: string;
     country?: string;
@@ -87,8 +88,9 @@ export default function LocationPicker({
       const address = result.address ?? {};
       onAddressResolvedRef.current(result.display_name, {
         street: address.road ?? address.pedestrian,
-        district: address.suburb ?? address.neighbourhood ?? address.city_district,
-        city: address.city ?? address.town ?? address.village,
+        district: address.city_district ?? address.district ?? address.county,
+        area: address.suburb ?? address.neighbourhood ?? address.quarter,
+        city: address.city ?? address.town ?? address.village ?? address.municipality,
         governorate: address.state,
         country: address.country,
         postalCode: address.postcode,

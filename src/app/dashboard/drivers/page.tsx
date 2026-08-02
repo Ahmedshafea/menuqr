@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
 import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { UserPlus, Phone, Bike, Upload, User } from "lucide-react";
+import { CloseDetailsButton } from "@/components/close-details-button";
 
 export const dynamic = "force-dynamic";
 
@@ -69,11 +70,13 @@ export default async function DriversPage() {
     <section className="max-w-7xl mx-auto p-4 md:p-8 space-y-8 dir-rtl">
       {/* Header Section */}
       <header className="border-b pb-4">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t("title")}</h1>
-        <p className="text-slate-500 mt-1 text-sm">{t("subtitle")}</p>
-      </header>
+        <div><h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t("title")}</h1>
+        <p className="text-slate-500 mt-1 text-sm">{t("subtitle")}</p></div>
+        <details className="product-create">
+          <summary className="button primary"><UserPlus />{t("new")}</summary>
+          <div className="product-form-panel team-form-panel">
+            <CloseDetailsButton />
 
-      {/* Add New Driver Form */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8">
         <div className="flex items-center gap-2 mb-6 text-slate-800">
           <UserPlus className="w-5 h-5 text-orange-600" />
@@ -172,6 +175,9 @@ export default async function DriversPage() {
           </div>
         </form>
       </div>
+          </div>
+        </details>
+      </header>
 
       {/* Drivers List Section */}
       <div className="space-y-4">

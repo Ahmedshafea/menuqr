@@ -5,6 +5,7 @@ import { branchListQuerySchema, branchSchema } from "@/lib/branch-validation";
 import { branchWriteData } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
+import { featureLimit } from "@/lib/subscription-plans";
 
 export async function GET(request: Request) {
   const { restaurantId } = await requireTenant();
@@ -52,6 +53,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const { restaurantId } = await requireTenant();
+  const [limit, currentCount] = await Promise.all([
+    featureLimit(restaurantId, "BRANCH_LIMIT"),
+    prisma.branch.count({ where: { restaurantId } }),
+  ]);
+  if (limit !== null && limit >= 0 && currentCount >= limit)
+    return apiError("PLAN_LIMIT_REACHED", 403);
   const parsed = branchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return apiError("INVALID_BRANCH", 400, parsed.error.flatten().fieldErrors);

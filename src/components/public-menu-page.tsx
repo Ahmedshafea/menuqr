@@ -10,9 +10,14 @@ import { RestaurantQr } from "@/components/restaurant-qr";
 import { FavoriteRestaurantButton } from "@/components/favorite-buttons";
 import { auth } from "@/auth";
 import { getDemoRestaurant } from "@/lib/demo-restaurants";
-import { calculatePromotions } from "@/lib/promotion-engine";
+import {
+  calculatePromotions,
+  isPromotionScheduled,
+  promotionTargetsLine,
+} from "@/lib/promotion-engine";
 import { getPromotionCandidates } from "@/lib/promotions";
 import { PublicBranchDialog } from "@/components/public-branch-dialog";
+import { hasFeature } from "@/lib/subscription-plans";
 export const revalidate = 60;
 const getDatabaseRestaurant = unstable_cache(
   async (slug: string) => {
@@ -47,18 +52,22 @@ const getDatabaseRestaurant = unstable_cache(
       },
     });
     if (!restaurant) return null;
-    const [rating, promotionCandidates] = await Promise.all([
+    const [rating, promotionCandidates, reviewsAvailable, qrMenuAvailable] = await Promise.all([
       prisma.restaurantReview.aggregate({
         where: { restaurantId: restaurant.id, status: "PUBLISHED" },
         _avg: { overall: true },
         _count: { _all: true },
       }),
       getPromotionCandidates({ restaurantId: restaurant.id }),
+      hasFeature(restaurant.id, "REVIEWS"),
+      hasFeature(restaurant.id, "QR_MENU"),
     ]);
+    if (!qrMenuAvailable) return null;
     return {
       ...restaurant,
       rating: { average: rating._avg.overall ?? 0, count: rating._count._all },
       promotionCandidates,
+      reviewsAvailable,
     };
   },
   ["public-menu-with-comment-reviews"],
@@ -105,16 +114,34 @@ export async function renderMenuPage({
   const todayHours = branch?.workingHours.find((item) => item.dayOfWeek === cairoDayAndTime().day);
   const products = restaurant.products.map((product) => {
     const basePrice = Number(product.price);
+    const categoryId =
+      "id" in product.category ? product.category.id : product.category.name;
+    const visiblePromotion =
+      "promotionCandidates" in restaurant
+        ? restaurant.promotionCandidates.find(
+            (promotion) =>
+              promotion.autoApply &&
+              !promotion.requiresCoupon &&
+              isPromotionScheduled(promotion, new Date(), "Africa/Cairo") &&
+              (!promotion.branchIds?.length ||
+                Boolean(
+                  branch &&
+                    "id" in branch &&
+                    promotion.branchIds.includes(branch.id),
+                )) &&
+              promotionTargetsLine(promotion, {
+                productId: product.id,
+                categoryId,
+              }),
+          )
+        : undefined;
     const productPromotion =
       "promotionCandidates" in restaurant
         ? calculatePromotions(restaurant.promotionCandidates, {
             subtotal: basePrice,
             lines: [{
               productId: product.id,
-              categoryId:
-                "id" in product.category
-                  ? product.category.id
-                  : product.category.name,
+              categoryId,
               unitPrice: basePrice,
               quantity: 1,
             }],
@@ -138,7 +165,11 @@ export async function renderMenuPage({
       ? locale === "ar" && productPromotion.appliedPromotions[0].nameAr
         ? productPromotion.appliedPromotions[0].nameAr
         : productPromotion.appliedPromotions[0].name
-      : null,
+      : visiblePromotion
+        ? locale === "ar" && visiblePromotion.nameAr
+          ? visiblePromotion.nameAr
+          : visiblePromotion.name
+        : null,
     category:
       locale === "ar" && product.category.nameAr
         ? product.category.nameAr
@@ -173,11 +204,13 @@ export async function renderMenuPage({
   const address = branch?.address || restaurant.address;
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}${branch && "slug" in branch ? `/${branch.slug}` : ""}`;
   const visibleReviews =
-    "reviews" in restaurant
+    (isDemo || ("reviewsAvailable" in restaurant && restaurant.reviewsAvailable)) && "reviews" in restaurant
       ? restaurant.reviews
           .filter((review) => Boolean(review.comment?.trim()))
           .slice(0, 5)
       : [];
+  const reviewsAvailable =
+    isDemo || ("reviewsAvailable" in restaurant && restaurant.reviewsAvailable);
   return (
     <main className="public-menu">
       <header
@@ -218,7 +251,7 @@ export async function renderMenuPage({
           <div className="menu-hero-copy">
             <p>{t("welcome")}</p>
             <h1>{name}</h1>
-            {"rating" in restaurant && restaurant.rating.count > 0 && (
+            {reviewsAvailable && "rating" in restaurant && restaurant.rating.count > 0 && (
               <a
                 className="restaurant-rating-badge"
                 href={`/menu/${restaurant.slug}/reviews`}
@@ -387,7 +420,21 @@ export async function renderMenuPage({
           promotionBanners={
             "promotionCandidates" in restaurant
               ? restaurant.promotionCandidates
-                  .filter((promotion) => promotion.autoApply || promotion.coupons?.length)
+                  .filter(
+                    (promotion) =>
+                      (promotion.autoApply || promotion.coupons?.length) &&
+                      isPromotionScheduled(
+                        promotion,
+                        new Date(),
+                        "Africa/Cairo",
+                      ) &&
+                      (!promotion.branchIds?.length ||
+                        Boolean(
+                          branch &&
+                            "id" in branch &&
+                            promotion.branchIds.includes(branch.id),
+                        )),
+                  )
                   .slice(0, 3)
                   .map((promotion) => ({
                     id: promotion.id,

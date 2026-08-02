@@ -65,6 +65,23 @@ export const checkoutSchema = z.object({
     context.addIssue({ code: "custom", path: ["email"], message: "Email and password are required" });
   if (data.fulfillmentType === "DELIVERY" && !data.deliveryAddress)
     context.addIssue({ code: "custom", path: ["deliveryAddress"], message: "Delivery address is required" });
+  if (data.fulfillmentType === "DELIVERY") {
+    const requiredAddressDetails = [
+      ["buildingName", data.buildingName],
+      ["floor", data.floor],
+      ["apartment", data.apartment],
+      ["landmark", data.landmark],
+      ["deliveryNotes", data.deliveryNotes],
+    ] as const;
+    for (const [field, value] of requiredAddressDetails) {
+      if (!value)
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message: "This delivery address detail is required",
+        });
+    }
+  }
   if ((data.deliveryLatitude == null) !== (data.deliveryLongitude == null))
     context.addIssue({ code: "custom", path: ["deliveryLatitude"], message: "Both delivery coordinates are required" });
 });

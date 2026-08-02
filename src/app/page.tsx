@@ -19,6 +19,10 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { RestaurantQr } from "@/components/restaurant-qr";
 import { auth } from "@/auth";
 import { demoRestaurantCards } from "@/lib/demo-restaurants";
+import {
+  getPlanCatalog,
+  ensureRestaurantSubscription,
+} from "@/lib/subscription-plans";
 
 export const revalidate = 300;
 
@@ -41,14 +45,19 @@ function unsplash(id: string, width = 800) {
 }
 
 export default async function Home() {
-  const [t, nav, accountNav, demoText, locale, session] = await Promise.all([
+  const [t, nav, accountNav, demoText, plansText, locale, session, catalog] = await Promise.all([
     getTranslations("landingV2"),
     getTranslations("nav"),
     getTranslations("launchPolish.navigation"),
     getTranslations("demo"),
+    getTranslations("subscriptionPlans"),
     getLocale(),
     auth(),
+    getPlanCatalog(),
   ]);
+  const currentSubscription = session?.user.restaurantId
+    ? await ensureRestaurantSubscription(session.user.restaurantId)
+    : null;
   const demoUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/demo-bistro`;
 
   return (
@@ -196,12 +205,46 @@ export default async function Home() {
 
       <section id="pricing" className="landing-section pricing-section">
         <div className="wrap pricing-wrap">
-          <div className="landing-heading"><span>{t("pricing.label")}</span><h2>{t("pricing.title")}</h2><p>{t("pricing.description")}</p></div>
-          <article className="free-plan-card">
-            <div className="free-plan-head"><div><small>{t("pricing.launch")}</small><h3>{t("pricing.cardTitle")}</h3></div><span>{t("pricing.price")}</span></div>
-            <ul>{["menu", "qr", "images", "whatsapp", "languages"].map((key) => <li key={key}><Check />{t(`pricing.items.${key}`)}</li>)}</ul>
-            <Link href="/register" className="button primary large">{t("pricing.button")}<ArrowRight /></Link>
-          </article>
+          <div className="landing-heading centered"><span>{plansText("label")}</span><h2>{plansText("title")}</h2><p>{plansText("description")}</p></div>
+          {catalog.launchPromotion && (
+            <aside className="launch-plan-notice">
+              <Sparkles />
+              <b>{plansText("trialBadge", { days: catalog.launchPromotion.trialDays })}</b>
+              <span>{plansText("launchEnds", { date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(catalog.launchPromotion.endsAt) })}</span>
+            </aside>
+          )}
+          <div className="pricing-plan-grid">
+            {catalog.plans.map((plan) => {
+              const isCurrent = currentSubscription?.planId === plan.id;
+              const launchApplies = catalog.launchPromotion?.affectedPlanId === plan.id;
+              const planName = locale === "ar" && plan.nameAr ? plan.nameAr : plan.name;
+              const description = locale === "ar" && plan.descriptionAr ? plan.descriptionAr : plan.description;
+              return (
+                <article className={`pricing-plan-card${plan.isRecommended ? " recommended" : ""}`} key={plan.id}>
+                  <header>
+                    <div>
+                      <small>{plan.code}</small>
+                      <h3>{planName}</h3>
+                    </div>
+                    {isCurrent ? <span className="current-plan-badge">{plansText("current")}</span> : plan.isRecommended ? <span>{plansText("recommended")}</span> : null}
+                  </header>
+                  {launchApplies && <b className="launch-offer-badge">{plansText("launchBadge")}</b>}
+                  <p>{description}</p>
+                  <div className="plan-price">
+                    {Number(plan.price) === 0 ? <strong>{plansText("free")}</strong> : <><strong>{new Intl.NumberFormat(locale).format(Number(plan.price))}</strong><span>{plansText("monthly")}</span></>}
+                  </div>
+                  <ul>
+                    {plan.features.map(({ feature, value }) => (
+                      <li key={feature.id}><Check />{value != null ? plansText("limitValue", { count: value < 0 ? plansText("unlimited") : value, feature: locale === "ar" && feature.nameAr ? feature.nameAr : feature.name }) : locale === "ar" && feature.nameAr ? feature.nameAr : feature.name}</li>
+                    ))}
+                  </ul>
+                  <Link href={session?.user.restaurantId ? `/dashboard/subscription?plan=${plan.code}` : session ? "/account" : "/register"} className={`button ${plan.isRecommended ? "primary" : "ghost"} large`}>
+                    {isCurrent ? plansText("current") : plansText("choose", { plan: planName })}<ArrowRight />
+                  </Link>
+                </article>
+              );
+            })}
+          </div>
         </div>
       </section>
 

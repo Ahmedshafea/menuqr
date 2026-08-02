@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenant } from "@/lib/tenant";
+import { featureLimit, hasFeature } from "@/lib/subscription-plans";
 import {
   uploadRestaurantImage,
   deleteRestaurantImage,
@@ -25,6 +26,12 @@ export default async function MenuManagementPage({
   searchParams: Promise<{ q?: string; result?: string; page?: string }>;
 }) {
   const { restaurantId } = await requireTenant();
+  const [pdfImportEnabled, productLimit, productCount] = await Promise.all([
+    hasFeature(restaurantId, "PDF_IMPORT"),
+    featureLimit(restaurantId, "PRODUCT_LIMIT"),
+    prisma.product.count({ where: { restaurantId } }),
+  ]);
+  const canCreateProduct = productLimit === null || productLimit < 0 || productCount < productLimit;
   const { q = "", result, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const take = 25;
@@ -118,6 +125,12 @@ export default async function MenuManagementPage({
   async function createProduct(form: FormData) {
     "use server";
     const { restaurantId } = await requireTenant();
+    const [limit, currentCount] = await Promise.all([
+      featureLimit(restaurantId, "PRODUCT_LIMIT"),
+      prisma.product.count({ where: { restaurantId } }),
+    ]);
+    if (limit !== null && limit >= 0 && currentCount >= limit)
+      redirect("/dashboard/subscription?required=PRODUCT_LIMIT");
     const name = String(form.get("name") ?? "").trim();
     const nameAr = String(form.get("nameAr") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
@@ -247,6 +260,12 @@ export default async function MenuManagementPage({
   async function duplicateProduct(form: FormData) {
     "use server";
     const { restaurantId } = await requireTenant();
+    const [limit, currentCount] = await Promise.all([
+      featureLimit(restaurantId, "PRODUCT_LIMIT"),
+      prisma.product.count({ where: { restaurantId } }),
+    ]);
+    if (limit !== null && limit >= 0 && currentCount >= limit)
+      redirect("/dashboard/subscription?required=PRODUCT_LIMIT");
     const source = await prisma.product.findFirst({
       where: { id: String(form.get("id")), restaurantId },
       select: { name: true, nameAr: true, description: true, descriptionAr: true, price: true, availability: true, isAvailable: true, isFeatured: true, stock: true, categoryId: true, images: { select: { url: true, publicId: true, alt: true, sortOrder: true } }, extras: { select: { name: true, nameAr: true, price: true, isAvailable: true } } },
@@ -571,10 +590,10 @@ export default async function MenuManagementPage({
           <p>{t("subtitle")}</p>
         </div>
         <div className="menu-header-actions">
-          <Link className="button ghost" href="/dashboard/menu/import-pdf">
+          {pdfImportEnabled && <Link className="button ghost" href="/dashboard/menu/import-pdf">
             <FileText />
             {toolsText("importPdf")}
-          </Link>
+          </Link>}
           <ProductImportDialog
             labels={{
               title: t("importProducts"),
@@ -620,7 +639,7 @@ export default async function MenuManagementPage({
               invalidRow: toolsText("invalidRow"),
             }}
           />
-          <details className="product-create">
+          {canCreateProduct && <details className="product-create">
             <summary className="button primary">
               <Plus />
               {t("addProduct")}
@@ -632,7 +651,7 @@ export default async function MenuManagementPage({
                 {fields()}
               </form>
             </div>
-          </details>
+          </details>}
         </div>
       </header>
       {result === "created" && <p className="form-success">{t("created")}</p>}

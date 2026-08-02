@@ -95,6 +95,17 @@ export const promotionInputSchema = z
         path: ["returningOnly"],
         message: "Customer conditions conflict",
       });
+    if (
+      value.type === "BUY_X_GET_Y" &&
+      value.buyQuantity != null &&
+      value.getQuantity != null &&
+      value.getQuantity > value.buyQuantity
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["getQuantity"],
+        message: "Free quantity cannot exceed the qualifying quantity",
+      });
   });
 
 export const promotionCalculateSchema = z.object({

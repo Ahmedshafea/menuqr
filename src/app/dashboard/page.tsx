@@ -1,19 +1,26 @@
 import Link from "next/link";
-import { BarChart3, CheckCircle2, Circle, Eye, Package, QrCode, ShoppingBag, Tags } from "lucide-react";
+import { BarChart3, CheckCircle2, Circle, Crown, Eye, Package, QrCode, ShoppingBag, Tags } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { requireTenant } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-disclosure";
+import { ensureRestaurantSubscription } from "@/lib/subscription-plans";
 
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const { session, restaurantId } = await requireTenant();
-  const [data, t, common, setup, empty, branchText, locale] = await Promise.all([getDashboardData(restaurantId), getTranslations("dashboard"), getTranslations("common"), getTranslations("mvpPolish.setup"), getTranslations("mvpPolish.empty"), getTranslations("branches"), getLocale()]);
+  const [data, subscription, t, common, setup, empty, branchText, planText, locale] = await Promise.all([getDashboardData(restaurantId), ensureRestaurantSubscription(restaurantId), getTranslations("dashboard"), getTranslations("common"), getTranslations("mvpPolish.setup"), getTranslations("mvpPolish.empty"), getTranslations("branches"), getTranslations("subscriptionPlans"), getLocale()]);
   const money = (value: number) => new Intl.NumberFormat(locale, { style: "currency", currency: data.restaurant.currency }).format(value);
   const stats = [
+    ...(subscription ? [
+      { label: planText("subscription"), value: locale === "ar" && subscription.plan.nameAr ? subscription.plan.nameAr : subscription.plan.name, icon: Crown },
+      { label: planText("status"), value: planText(`statuses.${subscription.status}`), icon: CheckCircle2 },
+      { label: planText("expires"), value: subscription.endsAt ? new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(subscription.endsAt) : planText("noExpiry"), icon: Crown },
+      { label: subscription.launchPromotion ? planText("launchActive") : planText("upgrade"), value: <Link href="/dashboard/subscription">{planText("upgrade")}</Link>, icon: Crown },
+    ] : []),
     { label: t("todayOrders"), value: data.todayOrders, icon: ShoppingBag }, { label: t("revenueToday"), value: money(data.revenueToday), icon: BarChart3 },
     { label: t("totalProducts"), value: data.totalProducts, icon: Package }, { label: t("categories"), value: data.categories, icon: Tags },
     { label: t("pendingOrders"), value: data.pendingOrders, icon: ShoppingBag }, { label: t("completedOrders"), value: data.completedOrders, icon: ShoppingBag },

@@ -156,6 +156,12 @@ model Restaurant {
   createdAt         DateTime                     @default(now())
   updatedAt         DateTime                     @updatedAt
   address           String?
+  governorate       String?
+  city              String?
+  district          String?
+  area              String?
+  street            String?
+  postalCode        String?
   descriptionAr     String?
   mapUrl            String?
   facebookUrl       String?
@@ -193,6 +199,10 @@ model Branch {
   address               String
   city                  String?
   state                 String?
+  governorate           String?
+  district              String?
+  area                  String?
+  street                String?
   country               String?
   postalCode            String?
   latitude              Decimal?          @db.Decimal(10, 7)
@@ -428,16 +438,70 @@ model OrderItemExtra {
 
 model Plan {
   id               String          @id @default(cuid())
+  code             String          @unique
   name             String          @unique
+  nameAr           String?
+  description      String?
+  descriptionAr    String?
   price            Decimal         @db.Decimal(10, 2)
+  currency         String          @default("EGP")
   interval         BillingInterval @default(MONTHLY)
+  displayOrder     Int             @default(0)
+  isActive         Boolean         @default(true)
+  isRecommended    Boolean         @default(false)
   maxProducts      Int
   maxBranches      Int
   maxStaff         Int
   analyticsEnabled Boolean         @default(false)
   customDomain     Boolean         @default(false)
   createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   subscriptions    Subscription[]
+  features         PlanFeature[]
+  launchPromotions LaunchPromotion[]
+}
+
+model Feature {
+  id          String        @id @default(cuid())
+  key         String        @unique
+  name        String
+  nameAr      String?
+  description String?
+  descriptionAr String?
+  valueType   FeatureValueType @default(BOOLEAN)
+  displayOrder Int          @default(0)
+  isPublic    Boolean       @default(true)
+  plans       PlanFeature[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model PlanFeature {
+  planId    String
+  featureId String
+  enabled   Boolean @default(true)
+  value     Int?
+  plan      Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature   Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureId])
+  @@index([featureId])
+}
+
+model LaunchPromotion {
+  id           String   @id @default(cuid())
+  name         String
+  enabled      Boolean  @default(false)
+  startsAt     DateTime
+  endsAt       DateTime
+  trialDays    Int      @default(30)
+  affectedPlanId String
+  affectedPlan Plan     @relation(fields: [affectedPlanId], references: [id])
+  subscriptions Subscription[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([enabled, startsAt, endsAt])
 }
 
 model Subscription {
@@ -448,11 +512,16 @@ model Subscription {
   restaurantId String
   planId       String
   createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  trialEndsAt  DateTime?
+  launchPromotionId String?
+  launchPromotion LaunchPromotion? @relation(fields: [launchPromotionId], references: [id])
   payments     Payment[]
   plan         Plan               @relation(fields: [planId], references: [id])
   restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId, status])
+  @@index([launchPromotionId])
 }
 
 model Payment {
@@ -941,6 +1010,11 @@ enum PaymentStatus {
 enum BillingInterval {
   MONTHLY
   YEARLY
+}
+
+enum FeatureValueType {
+  BOOLEAN
+  NUMBER
 }
 
 enum PromotionType {

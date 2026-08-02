@@ -19,6 +19,7 @@ import {
 import { OrderLocationActions } from "@/components/order-location-actions";
 import { AccordionSection } from "@/components/accordion-section";
 import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
+import { hasFeature } from "@/lib/subscription-plans";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,7 @@ export default async function OrderTrackingPage({
     }),
   ]);
   if (!order) notFound();
+  const reviewsAvailable = await hasFeature(order.restaurantId, "REVIEWS");
   const isRestaurant = Boolean(
     session?.user.restaurantId === order.restaurantId &&
     session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)),
@@ -474,7 +476,7 @@ export default async function OrderTrackingPage({
         });
       return true;
     });
-    if (changed)
+    if (changed && await hasFeature(order.restaurantId, "WHATSAPP_ORDERS"))
       await sendOrderStatusNotification({
         orderId: order.id,
         status: next as (typeof allowed)[number],
@@ -487,7 +489,7 @@ export default async function OrderTrackingPage({
         customerOrderUrl: publicOrderUrl(order.accessToken),
         language: order.restaurant.locale === "ar" ? "ar" : "en",
       });
-    if (changed && next === "COMPLETED")
+    if (changed && next === "COMPLETED" && await hasFeature(order.restaurantId, "REVIEWS") && await hasFeature(order.restaurantId, "WHATSAPP_ORDERS"))
       await sendReviewRequest({
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -505,6 +507,7 @@ export default async function OrderTrackingPage({
   async function moderateReview(form: FormData) {
     "use server";
     const { order } = await requireManagedOrder(token);
+    if (!(await hasFeature(order.restaurantId, "REVIEWS"))) return;
     const status = String(form.get("status"));
     if (!["PUBLISHED", "HIDDEN"].includes(status)) return;
     await prisma.restaurantReview.updateMany({
@@ -539,7 +542,7 @@ export default async function OrderTrackingPage({
     redirect(whatsappUrl(current.customerPhone, message));
   }
   async function assignDriver(form:FormData){"use server";const{order,session}=await requireManagedOrder(token);const driverId=String(form.get("driverId"));const driver=await prisma.deliveryDriver.findFirst({where:{id:driverId,restaurantId:order.restaurantId,status:{not:"OFFLINE"}},select:{id:true,name:true}});if(!driver)return;await prisma.$transaction(async tx=>{await tx.order.update({where:{id:order.id},data:{driverId:driver.id,status:"ASSIGNED_TO_DRIVER",driverAssignedAt:new Date()}});await tx.deliveryDriver.update({where:{id:driver.id},data:{status:"BUSY"}});await tx.orderStatusHistory.create({data:{orderId:order.id,status:"ASSIGNED_TO_DRIVER",userId:session.user.id}});await tx.orderActionLog.create({data:{orderId:order.id,userId:session.user.id,action:"DRIVER_ASSIGNED",details:{driver:driver.name}}});await createRestaurantNotification(tx,{restaurantId:order.restaurantId,type:"DRIVER_ASSIGNED",title:"Driver assigned",body:driver.name,href:`/order/${token}`,dedupeKey:`driver:${order.id}:${Date.now()}`})});revalidatePath(`/order/${token}`);}
-  async function submitReview(form:FormData){"use server";const current=await prisma.order.findUnique({where:{accessToken:token},select:{id:true,restaurantId:true,customerUserId:true,status:true,review:{select:{id:true}}}});if(!current||current.status!=="COMPLETED"||current.review)return;const score=(key:string)=>Math.max(1,Math.min(5,Number(form.get(key))||0));const overall=score("overall");if(!overall)return;await prisma.$transaction(async tx=>{await tx.restaurantReview.create({data:{restaurantId:current.restaurantId,orderId:current.id,customerUserId:current.customerUserId,foodQuality:score("foodQuality"),deliverySpeed:score("deliverySpeed"),packaging:score("packaging"),overall,comment:String(form.get("comment")||"").trim().slice(0,1000)||null}});await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"NEW_REVIEW",title:overall<=2?"Low customer rating":"New customer review",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`review:${current.id}`});if(overall<=2)await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"LOW_RATING",title:"Low customer rating",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`low-review:${current.id}`})});revalidatePath(`/order/${token}`);}
+  async function submitReview(form:FormData){"use server";const current=await prisma.order.findUnique({where:{accessToken:token},select:{id:true,restaurantId:true,customerUserId:true,status:true,review:{select:{id:true}}}});if(!current||current.status!=="COMPLETED"||current.review||!(await hasFeature(current.restaurantId,"REVIEWS")))return;const score=(key:string)=>Math.max(1,Math.min(5,Number(form.get(key))||0));const overall=score("overall");if(!overall)return;await prisma.$transaction(async tx=>{await tx.restaurantReview.create({data:{restaurantId:current.restaurantId,orderId:current.id,customerUserId:current.customerUserId,foodQuality:score("foodQuality"),deliverySpeed:score("deliverySpeed"),packaging:score("packaging"),overall,comment:String(form.get("comment")||"").trim().slice(0,1000)||null}});await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"NEW_REVIEW",title:overall<=2?"Low customer rating":"New customer review",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`review:${current.id}`});if(overall<=2)await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"LOW_RATING",title:"Low customer rating",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`low-review:${current.id}`})});revalidatePath(`/order/${token}`);}
 
   const timelineStatuses = [
     "NEW",
@@ -664,7 +667,7 @@ export default async function OrderTrackingPage({
                 notes: t("notes"),
               }}
             />
-            {order.status === "COMPLETED" && (
+            {reviewsAvailable && order.status === "COMPLETED" && (
               <a
                 className="button whatsapp-button"
                 target="_blank"
@@ -736,8 +739,8 @@ export default async function OrderTrackingPage({
               {isRestaurant&&order.fulfillmentType==="DELIVERY"&&<form action={assignDriver} className="driver-assignment"><select name="driverId" defaultValue={order.driverId??""}><option value="">{deliveryText("assign")}</option>{order.restaurant.drivers.filter(driver=>driver.status!=="OFFLINE"||driver.id===order.driverId).map(driver=><option key={driver.id} value={driver.id}>{driver.name} · {deliveryText(driver.status.toLowerCase() as "available"|"busy"|"offline")}</option>)}</select><button className="button primary">{deliveryText("assign")}</button></form>}
             </AccordionSection>
             {order.driver&&<article className="order-card driver-public-card">{order.driver.photoUrl&&<span style={{backgroundImage:`url(${order.driver.photoUrl})`}}/>}<div><h2>{order.driver.name}</h2><p>{order.driver.vehicleType}</p><a href={`tel:${order.driver.phone}`}>{order.driver.phone}</a>{order.driver.whatsapp&&<a className="button whatsapp-button" href={`https://wa.me/${order.driver.whatsapp}`}>{deliveryText("whatsapp")}</a>}{order.status==="OUT_FOR_DELIVERY"&&order.deliveryLatitude!=null&&order.deliveryLongitude!=null&&<a className="button ghost" target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${Number(order.deliveryLatitude)},${Number(order.deliveryLongitude)}`}>{mapsText("openGoogle")}</a>}{order.estimatedArrivalAt&&<small>{deliveryText("eta")}: {new Intl.DateTimeFormat(locale,{timeStyle:"short"}).format(order.estimatedArrivalAt)}</small>}</div></article>}
-            {order.status==="COMPLETED"&&!order.review&&<article className="order-card"><h2>{reviewText("title")}</h2><form action={submitReview} className="review-form">{[["foodQuality","food"],["deliverySpeed","speed"],["packaging","packaging"],["overall","overall"]].map(([name,key])=><label key={name}>{reviewText(key as "food"|"speed"|"packaging"|"overall")}<select name={name} required defaultValue="5">{[5,4,3,2,1].map(value=><option key={value} value={value}>{"★".repeat(value)}</option>)}</select></label>)}<textarea name="comment" maxLength={1000} placeholder={reviewText("comment")}/><button className="button primary">{reviewText("submit")}</button></form></article>}
-            {isRestaurant&&order.review&&<article className="order-card order-review-card"><header><h2>{t("rating")}</h2><span>{t(order.review.status==="PUBLISHED"?"published":order.review.status==="HIDDEN"?"hidden":"pendingReview")}</span></header><div><p><b>{order.review.foodQuality}/5</b>{t("foodRating")}</p><p><b>{order.review.deliverySpeed}/5</b>{t("deliveryRating")}</p><p><b>{order.review.packaging}/5</b>{t("packagingRating")}</p><p><b>{order.review.overall}/5</b>{t("overallRating")}</p></div>{order.review.comment&&<blockquote>{order.review.comment}</blockquote>}<form action={moderateReview}><button name="status" value="PUBLISHED" className="button primary">{t("publish")}</button><button name="status" value="HIDDEN" className="button ghost">{t("hide")}</button></form></article>}
+            {reviewsAvailable&&order.status==="COMPLETED"&&!order.review&&<article className="order-card"><h2>{reviewText("title")}</h2><form action={submitReview} className="review-form">{[["foodQuality","food"],["deliverySpeed","speed"],["packaging","packaging"],["overall","overall"]].map(([name,key])=><label key={name}>{reviewText(key as "food"|"speed"|"packaging"|"overall")}<select name={name} required defaultValue="5">{[5,4,3,2,1].map(value=><option key={value} value={value}>{"★".repeat(value)}</option>)}</select></label>)}<textarea name="comment" maxLength={1000} placeholder={reviewText("comment")}/><button className="button primary">{reviewText("submit")}</button></form></article>}
+            {reviewsAvailable&&isRestaurant&&order.review&&<article className="order-card order-review-card"><header><h2>{t("rating")}</h2><span>{t(order.review.status==="PUBLISHED"?"published":order.review.status==="HIDDEN"?"hidden":"pendingReview")}</span></header><div><p><b>{order.review.foodQuality}/5</b>{t("foodRating")}</p><p><b>{order.review.deliverySpeed}/5</b>{t("deliveryRating")}</p><p><b>{order.review.packaging}/5</b>{t("packagingRating")}</p><p><b>{order.review.overall}/5</b>{t("overallRating")}</p></div>{order.review.comment&&<blockquote>{order.review.comment}</blockquote>}<form action={moderateReview}><button name="status" value="PUBLISHED" className="button primary">{t("publish")}</button><button name="status" value="HIDDEN" className="button ghost">{t("hide")}</button></form></article>}
             <AccordionSection title={t("conversation")} className="order-card order-conversation-card">
               <div className="order-messages">
                 {order.messages.length ? (
