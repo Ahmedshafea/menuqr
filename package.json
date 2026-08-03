@@ -14,6 +14,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "db:studio": "prisma studio"
+    ,"admin:grant": "node scripts/grant-super-admin.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

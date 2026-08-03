@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isFeatureFlagEnabled } from "@/lib/platform-config";
 
 export const FEATURE_KEYS = [
   "PRODUCT_LIMIT",
@@ -111,7 +112,9 @@ export async function hasFeature(
   client: DatabaseClient = prisma,
 ) {
   const { featureMap } = await getRestaurantEntitlements(restaurantId, client);
-  return featureMap.get(key)?.enabled === true;
+  if (featureMap.get(key)?.enabled !== true) return false;
+  const globalKey = key === "CUSTOM_DOMAIN" ? "CUSTOM_DOMAINS" : key;
+  return isFeatureFlagEnabled(globalKey, { restaurantId, subjectId: restaurantId }, true);
 }
 
 export async function featureLimit(
@@ -121,7 +124,10 @@ export async function featureLimit(
 ) {
   const { featureMap } = await getRestaurantEntitlements(restaurantId, client);
   const feature = featureMap.get(key);
-  return feature?.enabled ? (feature.value ?? null) : 0;
+  if (!feature?.enabled) return 0;
+  const globalKey = key === "CUSTOM_DOMAIN" ? "CUSTOM_DOMAINS" : key;
+  if (!(await isFeatureFlagEnabled(globalKey, { restaurantId, subjectId: restaurantId }, true))) return 0;
+  return feature.value ?? null;
 }
 
 export async function createInitialSubscription(

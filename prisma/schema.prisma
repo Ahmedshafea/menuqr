@@ -9,30 +9,33 @@ datasource db {
 }
 
 model User {
-  id                    String                       @id @default(cuid())
-  name                  String
-  email                 String                       @unique
-  passwordHash          String
-  emailVerified         DateTime?
-  image                 String?
-  createdAt             DateTime                     @default(now())
-  updatedAt             DateTime                     @updatedAt
-  phone                 String?
-  phoneVerifiedAt       DateTime?
-  language              String                       @default("ar")
-  role                  String?
-  auditLogs             AuditLog[]
-  customerProfile       CustomerProfile?
-  customerOrders        Order[]                      @relation("CustomerOrders")
-  orderMessages         OrderMessage[]
-  orderStatusChanges    OrderStatusHistory[]
-  orderActions          OrderActionLog[]
-  notificationsRead     RestaurantNotificationRead[]
-  resetTokens           PasswordResetToken[]
-  restaurantMemberships RestaurantMember[]
-  roles                 UserRole[]
-  verificationTokens    VerificationToken[]
-  promotionUsages       PromotionUsage[]
+  id                      String                       @id @default(cuid())
+  name                    String
+  email                   String                       @unique
+  passwordHash            String
+  emailVerified           DateTime?
+  image                   String?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  phone                   String?
+  phoneVerifiedAt         DateTime?
+  language                String                       @default("ar")
+  role                    String?
+  auditLogs               AuditLog[]
+  customerProfile         CustomerProfile?
+  customerOrders          Order[]                      @relation("CustomerOrders")
+  orderMessages           OrderMessage[]
+  orderStatusChanges      OrderStatusHistory[]
+  orderActions            OrderActionLog[]
+  notificationsRead       RestaurantNotificationRead[]
+  resetTokens             PasswordResetToken[]
+  restaurantMemberships   RestaurantMember[]
+  roles                   UserRole[]
+  verificationTokens      VerificationToken[]
+  promotionUsages         PromotionUsage[]
+  platformSettingsUpdated PlatformSetting[]            @relation("PlatformSettingUpdatedBy")
+  featureFlagsUpdated     FeatureFlag[]                @relation("FeatureFlagUpdatedBy")
+  homepageSectionsUpdated HomepageSection[]            @relation("HomepageSectionUpdatedBy")
 }
 
 model UserRole {
@@ -438,59 +441,59 @@ model OrderItemExtra {
 }
 
 model Plan {
-  id               String          @id @default(cuid())
-  code             String          @unique
-  name             String          @unique
+  id               String            @id @default(cuid())
+  code             String            @unique
+  name             String            @unique
   nameAr           String?
   description      String?
   descriptionAr    String?
-  price            Decimal         @db.Decimal(10, 2)
-  currency         String          @default("EGP")
-  interval         BillingInterval @default(MONTHLY)
-  displayOrder     Int             @default(0)
-  isActive         Boolean         @default(true)
-  isRecommended    Boolean         @default(false)
+  price            Decimal           @db.Decimal(10, 2)
+  currency         String            @default("EGP")
+  interval         BillingInterval   @default(MONTHLY)
+  displayOrder     Int               @default(0)
+  isActive         Boolean           @default(true)
+  isRecommended    Boolean           @default(false)
   maxProducts      Int
   maxBranches      Int
   maxStaff         Int
-  analyticsEnabled Boolean         @default(false)
-  customDomain     Boolean         @default(false)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  analyticsEnabled Boolean           @default(false)
+  customDomain     Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   subscriptions    Subscription[]
   features         PlanFeature[]
   launchPromotions LaunchPromotion[]
 }
 
 model CustomDomain {
-  id             String             @id @default(cuid())
-  restaurantId   String             @unique
-  domain         String             @unique
-  status         CustomDomainStatus @default(PENDING)
-  verification   Json?
-  lastError      String?
-  lastCheckedAt  DateTime?
-  verifiedAt     DateTime?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  restaurant     Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id            String             @id @default(cuid())
+  restaurantId  String             @unique
+  domain        String             @unique
+  status        CustomDomainStatus @default(PENDING)
+  verification  Json?
+  lastError     String?
+  lastCheckedAt DateTime?
+  verifiedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  restaurant    Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([status, domain])
 }
 
 model Feature {
-  id          String        @id @default(cuid())
-  key         String        @unique
-  name        String
-  nameAr      String?
-  description String?
+  id            String           @id @default(cuid())
+  key           String           @unique
+  name          String
+  nameAr        String?
+  description   String?
   descriptionAr String?
-  valueType   FeatureValueType @default(BOOLEAN)
-  displayOrder Int          @default(0)
-  isPublic    Boolean       @default(true)
-  plans       PlanFeature[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  valueType     FeatureValueType @default(BOOLEAN)
+  displayOrder  Int              @default(0)
+  isPublic      Boolean          @default(true)
+  plans         PlanFeature[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 }
 
 model PlanFeature {
@@ -506,36 +509,36 @@ model PlanFeature {
 }
 
 model LaunchPromotion {
-  id           String   @id @default(cuid())
-  name         String
-  enabled      Boolean  @default(false)
-  startsAt     DateTime
-  endsAt       DateTime
-  trialDays    Int      @default(30)
+  id             String         @id @default(cuid())
+  name           String
+  enabled        Boolean        @default(false)
+  startsAt       DateTime
+  endsAt         DateTime
+  trialDays      Int            @default(30)
   affectedPlanId String
-  affectedPlan Plan     @relation(fields: [affectedPlanId], references: [id])
-  subscriptions Subscription[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  affectedPlan   Plan           @relation(fields: [affectedPlanId], references: [id])
+  subscriptions  Subscription[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([enabled, startsAt, endsAt])
 }
 
 model Subscription {
-  id           String             @id @default(cuid())
-  status       SubscriptionStatus @default(TRIALING)
-  startsAt     DateTime           @default(now())
-  endsAt       DateTime?
-  restaurantId String
-  planId       String
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  trialEndsAt  DateTime?
+  id                String             @id @default(cuid())
+  status            SubscriptionStatus @default(TRIALING)
+  startsAt          DateTime           @default(now())
+  endsAt            DateTime?
+  restaurantId      String
+  planId            String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  trialEndsAt       DateTime?
   launchPromotionId String?
-  launchPromotion LaunchPromotion? @relation(fields: [launchPromotionId], references: [id])
-  payments     Payment[]
-  plan         Plan               @relation(fields: [planId], references: [id])
-  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  launchPromotion   LaunchPromotion?   @relation(fields: [launchPromotionId], references: [id])
+  payments          Payment[]
+  plan              Plan               @relation(fields: [planId], references: [id])
+  restaurant        Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId, status])
   @@index([launchPromotionId])
@@ -577,6 +580,67 @@ model Setting {
   requireCompletedOrderForReview Boolean    @default(false)
   autoPublishReviews             Boolean    @default(false)
   restaurant                     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+/// Platform-wide configuration. Values are JSON so new settings can be added
+/// from Super Admin without a schema migration, while `valueType` keeps input
+/// and runtime validation explicit.
+model PlatformSetting {
+  id           String                   @id @default(cuid())
+  namespace    String
+  key          String
+  label        String
+  labelAr      String?
+  description  String?
+  value        Json
+  defaultValue Json?
+  valueType    PlatformConfigValueType
+  visibility   PlatformConfigVisibility @default(PRIVATE)
+  isEditable   Boolean                  @default(true)
+  validation   Json?
+  updatedById  String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  updatedBy    User?                    @relation("PlatformSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([namespace, key])
+  @@index([namespace, updatedAt])
+  @@index([visibility, namespace])
+}
+
+model FeatureFlag {
+  id                String    @id @default(cuid())
+  key               String    @unique
+  name              String
+  nameAr            String?
+  description       String?
+  enabled           Boolean   @default(false)
+  rolloutPercentage Int       @default(100)
+  conditions        Json?
+  startsAt          DateTime?
+  endsAt            DateTime?
+  updatedById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  updatedBy         User?     @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([enabled, startsAt, endsAt])
+}
+
+model HomepageSection {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  name         String
+  nameAr       String?
+  enabled      Boolean  @default(true)
+  displayOrder Int      @default(0)
+  content      Json
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  updatedBy    User?    @relation("HomepageSectionUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([enabled, displayOrder])
 }
 
 model Promotion {
@@ -1032,6 +1096,20 @@ enum BillingInterval {
 enum FeatureValueType {
   BOOLEAN
   NUMBER
+}
+
+enum PlatformConfigValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+  SECRET
+}
+
+enum PlatformConfigVisibility {
+  PUBLIC
+  PRIVATE
+  SECRET
 }
 
 enum CustomDomainStatus {

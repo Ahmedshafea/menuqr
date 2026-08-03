@@ -9,12 +9,15 @@ import { normalizeE164 } from "@/lib/whatsapp";
 import { verifyOtpVerificationProof } from "@/lib/otp";
 import { z } from "zod";
 import { createInitialSubscription } from "@/lib/subscription-plans";
+import { getConfigValue } from "@/lib/platform-config";
 
 const verifiedRegistrationSchema = registerSchema.extend({
   otpVerificationToken: z.string().min(20),
 });
 
 export async function POST(request: Request) {
+  if (!(await getConfigValue("registration", "enabled", true)))
+    return apiError("REGISTRATION_DISABLED", 403);
   const ip = requestIp(request);
   const limited = rateLimit(`register:${ip}`, 5, 60 * 60 * 1000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
