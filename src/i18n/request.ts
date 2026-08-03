@@ -16,7 +16,7 @@ export default getRequestConfig(async () => {
     cookieLocale === "en" || cookieLocale === "ar"
       ? cookieLocale
       : browserLocale;
-  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow, productFormOptions, pricingSettings, pdfImport, reviews, promotions, branches, subscriptionPlans, security] = await Promise.all([
+  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow, productFormOptions, pricingSettings, pdfImport, reviews, promotions, branches, subscriptionPlans, security, customDomains] = await Promise.all([
     import(`../../messages/${locale}.json`),
     import(`../../messages/product-tools.${locale}.json`),
     import(`../../messages/order-tracking.${locale}.json`),
@@ -36,6 +36,7 @@ export default getRequestConfig(async () => {
     import(`../../messages/branches.${locale}.json`),
     import(`../../messages/subscription-plans.${locale}.json`),
     import(`../../messages/security.${locale}.json`),
+    import(`../../messages/custom-domains.${locale}.json`),
   ]);
   return {
     locale,
@@ -59,6 +60,7 @@ export default getRequestConfig(async () => {
       branches: branches.default,
       subscriptionPlans: subscriptionPlans.default,
       security: security.default,
+      customDomains: customDomains.default,
     },
     timeZone: "Africa/Cairo",
   };
