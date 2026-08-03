@@ -1,0 +1,8 @@
+import { prisma } from "@/lib/prisma";
+
+export default async function AuditLogsPage({ searchParams }: { searchParams: Promise<{ page?: string; q?: string }> }) {
+  const params = await searchParams; const page = Math.max(1, Number(params.page) || 1); const q = params.q?.trim(); const take = 30;
+  const where = q ? { OR: [{ action: { contains: q, mode: "insensitive" as const } }, { entity: { contains: q, mode: "insensitive" as const } }] } : {};
+  const [logs, count] = await Promise.all([prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * take, take, select: { id: true, action: true, entity: true, entityId: true, ipAddress: true, createdAt: true, metadata: true, user: { select: { name: true, email: true } } } }), prisma.auditLog.count({ where })]);
+  return <><header className="admin-header"><div><h1>سجل الإدارة</h1><p>سجل غير قابل للتعديل لكل تغيير إداري مهم.</p></div></header><section className="admin-card"><form className="admin-form"><label className="full">بحث<input name="q" defaultValue={q}/></label><button>بحث</button></form><table className="admin-table"><thead><tr><th>المستخدم</th><th>الإجراء</th><th>المورد</th><th>IP</th><th>التاريخ</th></tr></thead><tbody>{logs.map((log) => <tr key={log.id}><td data-label="المستخدم">{log.user?.name ?? "النظام"}<br/><small>{log.user?.email}</small></td><td data-label="الإجراء">{log.action}</td><td data-label="المورد">{log.entity}<br/><code>{log.entityId}</code></td><td data-label="IP">{log.ipAddress ?? "—"}</td><td data-label="التاريخ">{new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(log.createdAt)}</td></tr>)}</tbody></table><p>صفحة {page} — {count} سجل</p></section></>;
+}

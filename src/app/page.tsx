@@ -23,6 +23,7 @@ import {
   getPlanCatalog,
   ensureRestaurantSubscription,
 } from "@/lib/subscription-plans";
+import { getHomepageSections } from "@/lib/platform-config";
 
 export const revalidate = 300;
 
@@ -45,7 +46,7 @@ function unsplash(id: string, width = 800) {
 }
 
 export default async function Home() {
-  const [t, nav, accountNav, demoText, plansText, locale, session, catalog] = await Promise.all([
+  const [t, nav, accountNav, demoText, plansText, locale, session, catalog, homepageSections] = await Promise.all([
     getTranslations("landingV2"),
     getTranslations("nav"),
     getTranslations("launchPolish.navigation"),
@@ -54,15 +55,26 @@ export default async function Home() {
     getLocale(),
     auth(),
     getPlanCatalog(),
+    getHomepageSections(),
   ]);
   const currentSubscription = session?.user.restaurantId
     ? await ensureRestaurantSubscription(session.user.restaurantId)
     : null;
   const demoUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/demo-bistro`;
+  const content = (key: string) => {
+    const section = homepageSections.find((item) => item.key === key);
+    const localized = section?.content && typeof section.content === "object" && !Array.isArray(section.content)
+      ? (section.content as Record<string, unknown>)[locale]
+      : null;
+    return { enabled: section?.enabled ?? true, value: localized && typeof localized === "object" && !Array.isArray(localized) ? localized as Record<string, unknown> : {} };
+  };
+  const hero = content("hero");
+  const announcement = content("announcement");
+  const cmsText = (section: { value: Record<string, unknown> }, key: string, fallback: string) => typeof section.value[key] === "string" ? section.value[key] as string : fallback;
 
   return (
     <main className="landing-page">
-      <div className="launch-banner">🎉 {t("banner")}</div>
+      {announcement.enabled && <div className="launch-banner">🎉 {cmsText(announcement, "text", t("banner"))}</div>}
 
       <nav className="landing-nav wrap" aria-label={t("navigationLabel")}>
         <Link href="/" className="brand">
@@ -80,11 +92,11 @@ export default async function Home() {
         </div>
       </nav>
 
-      <section className="landing-hero wrap">
+      {hero.enabled && <section className="landing-hero wrap">
         <div className="hero-copy">
-          <div className="eyebrow"><Sparkles size={15} />{t("hero.eyebrow")}</div>
-          <h1>{t("hero.title")}</h1>
-          <p>{t("hero.description")}</p>
+          <div className="eyebrow"><Sparkles size={15} />{cmsText(hero, "eyebrow", t("hero.eyebrow"))}</div>
+          <h1>{cmsText(hero, "title", t("hero.title"))}</h1>
+          <p>{cmsText(hero, "description", t("hero.description"))}</p>
           <ul className="hero-benefits">
             {["free", "bilingual", "mobile"].map((key) => (
               <li key={key}><Check />{t(`hero.bullets.${key}`)}</li>
@@ -123,7 +135,7 @@ export default async function Home() {
             <RestaurantQr menuUrl={demoUrl} slug="demo-bistro" label={t("hero.scanToOpen")} />
           </div>
         </div>
-      </section>
+      </section>}
 
       <section className="landing-section category-section wrap">
         <div className="landing-heading centered"><span>{t("categories.label")}</span><h2>{t("categories.title")}</h2><p>{t("categories.description")}</p></div>

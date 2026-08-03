@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { getRequestConfig } from "next-intl/server";
+import { deepMerge, getConfigNamespace } from "@/lib/platform-config";
 
 export const locales = ["ar", "en"] as const;
 export type AppLocale = (typeof locales)[number];
@@ -16,7 +17,7 @@ export default getRequestConfig(async () => {
     cookieLocale === "en" || cookieLocale === "ar"
       ? cookieLocale
       : browserLocale;
-  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow, productFormOptions, pricingSettings, pdfImport, reviews, promotions, branches, subscriptionPlans, security, customDomains] = await Promise.all([
+  const [messages, productTools, orderTracking, qr, landingV2, customerAccount, toast, launchPolish, mvpPolish, demo, restaurantWorkflow, productFormOptions, pricingSettings, pdfImport, reviews, promotions, branches, subscriptionPlans, security, customDomains, messageOverrides] = await Promise.all([
     import(`../../messages/${locale}.json`),
     import(`../../messages/product-tools.${locale}.json`),
     import(`../../messages/order-tracking.${locale}.json`),
@@ -37,31 +38,33 @@ export default getRequestConfig(async () => {
     import(`../../messages/subscription-plans.${locale}.json`),
     import(`../../messages/security.${locale}.json`),
     import(`../../messages/custom-domains.${locale}.json`),
+    getConfigNamespace(`messages.${locale}`, { includePrivate: true }),
   ]);
+  const baseMessages = {
+    ...messages.default,
+    productTools: productTools.default,
+    orderTracking: orderTracking.default,
+    qr: qr.default,
+    landingV2: landingV2.default,
+    customerAccount: customerAccount.default,
+    toast: toast.default,
+    launchPolish: launchPolish.default,
+    mvpPolish: mvpPolish.default,
+    demo: demo.default,
+    restaurantWorkflow: restaurantWorkflow.default,
+    productFormOptions: productFormOptions.default,
+    pricingSettings: pricingSettings.default,
+    pdfImport: pdfImport.default,
+    reviews: reviews.default,
+    promotions: promotions.default,
+    branches: branches.default,
+    subscriptionPlans: subscriptionPlans.default,
+    security: security.default,
+    customDomains: customDomains.default,
+  };
   return {
     locale,
-    messages: {
-      ...messages.default,
-      productTools: productTools.default,
-      orderTracking: orderTracking.default,
-      qr: qr.default,
-      landingV2: landingV2.default,
-      customerAccount: customerAccount.default,
-      toast: toast.default,
-      launchPolish: launchPolish.default,
-      mvpPolish: mvpPolish.default,
-      demo: demo.default,
-      restaurantWorkflow: restaurantWorkflow.default,
-      productFormOptions: productFormOptions.default,
-      pricingSettings: pricingSettings.default,
-      pdfImport: pdfImport.default,
-      reviews: reviews.default,
-      promotions: promotions.default,
-      branches: branches.default,
-      subscriptionPlans: subscriptionPlans.default,
-      security: security.default,
-      customDomains: customDomains.default,
-    },
-    timeZone: "Africa/Cairo",
+    messages: deepMerge(baseMessages, messageOverrides),
+    timeZone: String(await (await getConfigNamespace("general", { includePrivate: true })).timezone || "Africa/Cairo"),
   };
 });
