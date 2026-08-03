@@ -176,6 +176,7 @@ model Restaurant {
   members           RestaurantMember[]
   settings          Setting?
   subscriptions     Subscription[]
+  customDomain      CustomDomain?
   notifications     RestaurantNotification[]
   optionGroups      ProductOptionGroup[]
   options           ProductOption[]
@@ -459,6 +460,22 @@ model Plan {
   subscriptions    Subscription[]
   features         PlanFeature[]
   launchPromotions LaunchPromotion[]
+}
+
+model CustomDomain {
+  id             String             @id @default(cuid())
+  restaurantId   String             @unique
+  domain         String             @unique
+  status         CustomDomainStatus @default(PENDING)
+  verification   Json?
+  lastError      String?
+  lastCheckedAt  DateTime?
+  verifiedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  restaurant     Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([status, domain])
 }
 
 model Feature {
@@ -1015,6 +1032,12 @@ enum BillingInterval {
 enum FeatureValueType {
   BOOLEAN
   NUMBER
+}
+
+enum CustomDomainStatus {
+  PENDING
+  VERIFIED
+  ERROR
 }
 
 enum PromotionType {

@@ -80,10 +80,12 @@ export async function renderMenuPage({
   restaurantSlug,
   branchSlug,
   searchParams,
+  customOrigin,
 }: {
   restaurantSlug: string;
   branchSlug?: string;
   searchParams: Promise<{ reorder?: string; extras?: string; checkout?: string }>;
+  customOrigin?: string;
 }) {
   const [restaurant, t, qr, closedText, experienceText, demoText, locale] = await Promise.all([
     getRestaurant(restaurantSlug),
@@ -202,7 +204,7 @@ export async function renderMenuPage({
   const session = await auth();
   const customerDefaults = !isDemo && session?.user.roles.includes("CUSTOMER") ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, phone: true, customerProfile: { select: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }], select: { id: true, title: true, address: true, latitude: true, longitude: true, isDefault: true } } } } } }) : null;
   const address = branch?.address || restaurant.address;
-  const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}${branch && "slug" in branch ? `/${branch.slug}` : ""}`;
+  const menuUrl = customOrigin || `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}${branch && "slug" in branch ? `/${branch.slug}` : ""}`;
   const visibleReviews =
     (isDemo || ("reviewsAvailable" in restaurant && restaurant.reviewsAvailable)) && "reviews" in restaurant
       ? restaurant.reviews

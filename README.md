@@ -48,6 +48,9 @@ They never create orders, analytics events, or production database records.
 | `SUPABASE_SERVICE_ROLE_KEY`      |        Yes | Server-only Storage administration key              |
 | `AUTH_SECRET`                    |        Yes | Random 32+ byte Auth.js signing secret              |
 | `NEXT_PUBLIC_APP_URL`            |        Yes | Canonical application URL                           |
+| `MENUQR_VERCEL_ACCESS_TOKEN`     | Domains only | Server-only token used to add and verify project domains |
+| `MENUQR_VERCEL_PROJECT_ID`       | Domains only | Vercel project ID (`prj_...`)                       |
+| `MENUQR_VERCEL_TEAM_ID`          |   Optional | Team ID when the project belongs to a Vercel team   |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Production | Free Cloudflare Turnstile public site key           |
 | `TURNSTILE_SECRET_KEY`           | Production | Server-only Cloudflare Turnstile secret             |
 
