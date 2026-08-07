@@ -21,6 +21,7 @@ model User {
   phoneVerifiedAt         DateTime?
   language                String                       @default("ar")
   role                    String?
+  isActive                Boolean                      @default(true)
   auditLogs               AuditLog[]
   customerProfile         CustomerProfile?
   customerOrders          Order[]                      @relation("CustomerOrders")
@@ -36,6 +37,8 @@ model User {
   platformSettingsUpdated PlatformSetting[]            @relation("PlatformSettingUpdatedBy")
   featureFlagsUpdated     FeatureFlag[]                @relation("FeatureFlagUpdatedBy")
   homepageSectionsUpdated HomepageSection[]            @relation("HomepageSectionUpdatedBy")
+
+  @@index([isActive, createdAt])
 }
 
 model UserRole {

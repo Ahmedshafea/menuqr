@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/validators";
-import { publicOrderUrl, whatsappUrl } from "@/lib/utils";
+import { publicOrderUrl } from "@/lib/utils";
 import { isRestaurantOpen } from "@/lib/restaurant-hours";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
@@ -424,7 +424,6 @@ export async function POST(request: Request) {
       orderId: order.id,
       orderNumber: number,
       trackingUrl,
-      whatsappUrl: whatsappUrl(destinationWhatsapp, message),
     },
     { status: 201 },
   );
