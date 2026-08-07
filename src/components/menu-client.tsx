@@ -373,16 +373,6 @@ export function MenuClient({
     <>
       {products.length ? (
         <>
-          {promotionBanners.length > 0 && (
-            <section className="promotion-banners" aria-label={promotionText("appliedPromotions")}>
-              {promotionBanners.map((promotion) => (
-                <article key={promotion.id}>
-                  <b>{promotion.name}</b>
-                  {promotion.coupon && <span>{promotionText("coupon")}: <code>{promotion.coupon}</code></span>}
-                </article>
-              ))}
-            </section>
-          )}
           <div className="menu-tools">
             <div className="menu-search">
               <Search />
