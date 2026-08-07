@@ -367,7 +367,7 @@ export function MenuClient({
       setLoading(false);
       return;
     }
-    window.location.href = body.whatsappUrl;
+    window.location.href = body.trackingUrl;
   }
   return (
     <>

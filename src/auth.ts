@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { consumeOtp, OTP_LENGTH } from "@/lib/otp";
 import { normalizeE164 } from "@/lib/whatsapp";
+import { getCachedUserAccess } from "@/lib/user-access";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -24,6 +25,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: true,
             email: true,
             passwordHash: true,
+            isActive: true,
             roles: { select: { role: true } },
             restaurantMemberships: {
               select: { restaurantId: true },
@@ -32,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           },
         });
-        if (!user || !(await compare(parsed.data.password, user.passwordHash)))
+        if (!user?.isActive || !(await compare(parsed.data.password, user.passwordHash)))
           return null;
         return {
           id: user.id,
@@ -56,13 +58,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { phone: { in: [phone, phone.slice(1)] } },
           take: 2,
           select: {
-            id: true, name: true, email: true,
+            id: true, name: true, email: true, isActive: true,
             roles: { select: { role: true } },
             restaurantMemberships: { select: { restaurantId: true }, orderBy: { createdAt: "asc" }, take: 1 },
           },
         });
         if (matches.length !== 1 || await consumeOtp(phone, parsed.data.code) !== "verified") return null;
         const user = matches[0];
+        if (!user.isActive) return null;
         await prisma.user.update({ where: { id: user.id }, data: { phone, phoneVerifiedAt: new Date() } });
         return { id: user.id, name: user.name, email: user.email, roles: user.roles.map((item) => item.role), restaurantId: user.restaurantMemberships[0]?.restaurantId ?? null };
       },
@@ -73,16 +76,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.roles = user.roles;
         token.restaurantId = user.restaurantId;
-      } else if (!Array.isArray(token.roles) && token.sub) {
-        const identity = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: {
-            roles: { select: { role: true } },
-            restaurantMemberships: { select: { restaurantId: true }, orderBy: { createdAt: "asc" }, take: 1 },
-          },
-        });
-        token.roles = identity?.roles.map((item) => item.role) ?? [];
-        token.restaurantId = identity?.restaurantMemberships[0]?.restaurantId ?? null;
+      } else if (token.sub) {
+        const identity = await getCachedUserAccess(token.sub);
+        token.roles = identity?.isActive ? identity.roles.map((item) => item.role) : [];
+        token.restaurantId = identity?.isActive ? identity.restaurantMemberships[0]?.restaurantId ?? null : null;
       }
       return token;
     },

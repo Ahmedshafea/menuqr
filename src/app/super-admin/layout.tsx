@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { Activity, CreditCard, FileClock, Flag, LayoutDashboard, Settings2 } from "lucide-react";
+import { Activity, Building2, CreditCard, FileClock, Flag, LayoutDashboard, ReceiptText, Settings2, Users } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/super-admin";
 import "./super-admin.css";
 
 const navigation = [
   ["/super-admin", "نظرة عامة", LayoutDashboard],
+  ["/super-admin/users", "المستخدمون", Users],
+  ["/super-admin/restaurants", "المطاعم والفروع", Building2],
+  ["/super-admin/orders", "الطلبات", ReceiptText],
   ["/super-admin/configuration", "الإعدادات الديناميكية", Settings2],
   ["/super-admin/plans", "الخطط والمزايا", CreditCard],
   ["/super-admin/configuration#flags", "Feature Flags", Flag],
