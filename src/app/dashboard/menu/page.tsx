@@ -4,8 +4,9 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 import { featureLimit, hasFeature } from "@/lib/subscription-plans";
+import { assertTenantQuota } from "@/lib/quota";
 import {
   uploadRestaurantImage,
   deleteRestaurantImage,
@@ -159,6 +160,7 @@ export default async function MenuManagementPage({
         : null;
     try {
       await prisma.$transaction(async (tx) => {
+        await assertTenantQuota(tx, restaurantId, "PRODUCT_LIMIT", () => tx.product.count({ where: { restaurantId } }));
         if (categoryId) {
           if (
             !(await tx.category.findFirst({
@@ -271,8 +273,9 @@ export default async function MenuManagementPage({
       select: { name: true, nameAr: true, description: true, descriptionAr: true, price: true, availability: true, isAvailable: true, isFeatured: true, stock: true, categoryId: true, images: { select: { url: true, publicId: true, alt: true, sortOrder: true } }, extras: { select: { name: true, nameAr: true, price: true, isAvailable: true } } },
     });
     if (!source) return;
-    await prisma.product.create({
-      data: {
+    await prisma.$transaction(async (tx) => {
+      await assertTenantQuota(tx, restaurantId, "PRODUCT_LIMIT", () => tx.product.count({ where: { restaurantId } }));
+      await tx.product.create({ data: {
         restaurantId,
         categoryId: source.categoryId,
         name: `${source.name} (Copy)`,
@@ -286,7 +289,7 @@ export default async function MenuManagementPage({
         stock: source.stock,
         images: { create: source.images.map((image) => ({ ...image, publicId: null })) },
         extras: { create: source.extras },
-      },
+      } });
     });
     revalidatePath("/dashboard/menu");
     revalidateTag("public-menu");
@@ -398,7 +401,7 @@ export default async function MenuManagementPage({
   }
   async function deleteProduct(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     const id = String(form.get("id"));
     const product = await prisma.product.findFirst({
       where: { id, restaurantId },

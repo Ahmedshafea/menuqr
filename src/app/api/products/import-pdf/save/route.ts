@@ -5,6 +5,7 @@ import { normalizePdfMenu, pdfMenuSchema } from "@/lib/pdf-menu-import";
 import { prisma } from "@/lib/prisma";
 import { productMatchKey } from "@/lib/product-import";
 import { featureLimit, hasFeature } from "@/lib/subscription-plans";
+import { assertTenantQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     let createdProducts = 0;
     let skippedProducts = 0;
     await prisma.$transaction(async (tx) => {
+      await assertTenantQuota(tx, restaurantId, "PRODUCT_LIMIT", () => tx.product.count({ where: { restaurantId } }), newProductCount);
       for (const [categoryIndex, category] of menu.categories.entries()) {
         const categoryKey = category.name.toLocaleLowerCase();
         let categoryId = categoryMap.get(categoryKey);

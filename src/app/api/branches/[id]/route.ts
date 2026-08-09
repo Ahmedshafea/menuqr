@@ -4,7 +4,7 @@ import { apiError } from "@/lib/api";
 import { branchSchema } from "@/lib/branch-validation";
 import { branchWriteData } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 
 export async function GET(
   _request: Request,
@@ -23,7 +23,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { restaurantId } = await requireTenant();
+  const { restaurantId } = await requireOwner();
   const id = (await params).id;
   const parsed = branchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
@@ -69,7 +69,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { restaurantId } = await requireTenant();
+  const { restaurantId } = await requireOwner();
   const id = (await params).id;
   const branch = await prisma.branch.findFirst({
     where: { id, restaurantId },

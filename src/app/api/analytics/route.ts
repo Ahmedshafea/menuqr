@@ -16,9 +16,9 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return apiError("INVALID_ANALYTICS_EVENT", 400);
   if (isDemoSlug(parsed.data.slug)) return new Response(null, { status: 204 });
-  const limited = rateLimit(`analytics:${ip}`, 60, 60_000);
+  const limited = await rateLimit(`analytics:${ip}`, 60, 60_000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
-  const duplicate = rateLimit(
+  const duplicate = await rateLimit(
     `analytics-dedupe:${ip}:${parsed.data.slug}:${parsed.data.type}`,
     1,
     60_000,

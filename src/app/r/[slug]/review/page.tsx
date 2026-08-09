@@ -64,7 +64,7 @@ export default async function RestaurantReviewFormPage({
       requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       requestHeaders.get("x-real-ip") ||
       "unknown";
-    if (!rateLimit(`public-review:${currentRestaurant.id}:${ip}`, 3, 60 * 60_000).allowed)
+    if (!(await rateLimit(`public-review:${currentRestaurant.id}:${ip}`, 3, 60 * 60_000)).allowed)
       redirect(`/r/${slug}/review?result=limited`);
     const values = {
       overall: score(form, "overall"),

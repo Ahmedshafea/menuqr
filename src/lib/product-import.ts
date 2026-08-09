@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import { readSheet } from "read-excel-file/node";
 
 export const PRODUCT_IMPORT_COLUMNS = [
   "category_en", "category_ar", "name_en", "name_ar", "description_en",
@@ -49,13 +49,32 @@ const booleanValue = (value: unknown, fallback: boolean) => {
   throw new Error("INVALID_BOOLEAN");
 };
 
-export function parseProductImport(buffer: ArrayBuffer, extension: "xlsx" | "csv") {
-  const workbook = extension === "csv"
-    ? XLSX.read(Buffer.from(buffer), { type: "buffer", codepage: 65001 })
-    : XLSX.read(buffer, { type: "array", cellDates: false });
-  const firstSheet = workbook.SheetNames[0];
-  if (!firstSheet) throw new Error("The file has no worksheets");
-  const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheet], { defval: "", raw: true });
+function csvRows(value: string) {
+  const rows: string[][] = [];
+  let row: string[] = [], field = "", quoted = false;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (quoted && character === '"' && value[index + 1] === '"') { field += '"'; index++; }
+    else if (character === '"') quoted = !quoted;
+    else if (!quoted && character === ",") { row.push(field); field = ""; }
+    else if (!quoted && (character === "\n" || character === "\r")) {
+      if (character === "\r" && value[index + 1] === "\n") index++;
+      row.push(field); rows.push(row); row = []; field = "";
+    } else field += character;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  if (quoted) throw new Error("Malformed CSV: unterminated quoted field");
+  return rows;
+}
+
+export async function parseProductImport(buffer: ArrayBuffer, extension: "xlsx" | "csv") {
+  let table: unknown[][];
+  if (extension === "csv") table = csvRows(new TextDecoder("utf-8").decode(buffer));
+  else table = await readSheet(Buffer.from(buffer)) as unknown[][];
+  if (!table.length) throw new Error("The file has no worksheets or rows");
+  const headers = table[0].map((value) => text(value).replace(/^\uFEFF/, ""));
+  const records = table.slice(1).filter((row) => row.some((value) => text(value))).map((row) =>
+    Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])) as Record<string, unknown>);
   if (records.length > 1000) throw new Error("A maximum of 1000 products can be imported at once");
 
   const errors: { rowNumber: number; reason: string }[] = [];

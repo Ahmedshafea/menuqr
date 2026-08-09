@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
-  const limited = rateLimit(
+  const limited = await rateLimit(
     `promotion-calculate:${requestIp(request)}`,
     30,
     60_000,

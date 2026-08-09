@@ -21,7 +21,10 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 const activeSubscriptionWhere = (now: Date): Prisma.SubscriptionWhereInput => ({
   status: { in: ["ACTIVE", "TRIALING"] },
-  OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+  AND: [
+    { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+    { OR: [{ plan: { price: 0 } }, { provider: "LEMON_SQUEEZY", providerSubscriptionId: { not: null } }] },
+  ],
 });
 
 export async function getPlanCatalog(client: DatabaseClient = prisma) {

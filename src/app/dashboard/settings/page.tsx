@@ -1,7 +1,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { RestaurantQr } from "@/components/restaurant-qr";
 import { redirect } from "next/navigation";
@@ -33,7 +33,7 @@ export default async function SettingsPage() {
   const menuUrl = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/menu/${restaurant.slug}`;
   async function save(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     const reviewsFeatureEnabled = await hasFeature(restaurantId, "REVIEWS");
     const logo = form.get("logo");
     const cover = form.get("cover");

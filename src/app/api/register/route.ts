@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   if (!(await getConfigValue("registration", "enabled", true)))
     return apiError("REGISTRATION_DISABLED", 403);
   const ip = requestIp(request);
-  const limited = rateLimit(`register:${ip}`, 5, 60 * 60 * 1000);
+  const limited = await rateLimit(`register:${ip}`, 5, 60 * 60 * 1000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const body = (await request.json().catch(() => null)) as Record<
     string,

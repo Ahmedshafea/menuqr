@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 import { uploadRestaurantImage } from "@/lib/supabase/storage";
 import { UserPlus, Phone, Bike, Upload, User } from "lucide-react";
 import { CloseDetailsButton } from "@/components/close-details-button";
@@ -20,7 +20,7 @@ export default async function DriversPage() {
 
   async function save(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     const name = String(form.get("name") || "").trim();
     const phone = String(form.get("phone") || "").replace(/\D/g, "");
     if (name.length < 2 || phone.length < 8) return;
@@ -49,7 +49,7 @@ export default async function DriversPage() {
 
   async function status(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     const value = String(form.get("status"));
     if (!["AVAILABLE", "BUSY", "OFFLINE"].includes(value)) return;
     await prisma.deliveryDriver.updateMany({

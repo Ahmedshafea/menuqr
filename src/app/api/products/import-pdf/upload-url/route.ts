@@ -14,7 +14,7 @@ export async function POST() {
   if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
     return apiError("UNAUTHORIZED", 401);
   if (!(await hasFeature(restaurantId, "PDF_IMPORT"))) return apiError("FEATURE_NOT_AVAILABLE", 403);
-  const limit = rateLimit(`pdf-import-upload:${restaurantId}`, 5, 15 * 60 * 1000);
+  const limit = await rateLimit(`pdf-import-upload:${restaurantId}`, 5, 15 * 60 * 1000);
   if (!limit.allowed) return rateLimitError(limit.retryAfter);
   const path = `${restaurantId}/${randomUUID()}.pdf`;
   const { data, error } = await createSupabaseAdmin().storage

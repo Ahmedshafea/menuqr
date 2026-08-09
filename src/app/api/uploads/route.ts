@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const session = await auth();
   const restaurantId = tenant(session);
   if (!restaurantId) return apiError("UNAUTHORIZED", 401);
-  const limited = rateLimit(
+  const limited = await rateLimit(
     `uploads:${restaurantId}:${requestIp(request)}`,
     20,
     10 * 60 * 1000,

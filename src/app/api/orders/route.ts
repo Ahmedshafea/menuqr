@@ -21,11 +21,12 @@ import {
   recordPromotionUsage,
 } from "@/lib/promotions";
 import { branchWhatsapp } from "@/lib/branches";
+import { aggregateCartQuantities, reserveInventory } from "@/lib/inventory";
 
 export async function POST(request: Request) {
   const session = await auth();
   const ip = requestIp(request);
-  const limited = rateLimit(`orders:${ip}`, 10, 10 * 60 * 1000);
+  const limited = await rateLimit(`orders:${ip}`, 10, 10 * 60 * 1000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const parsed = checkoutSchema.safeParse(
     await request.json().catch(() => null),
@@ -115,11 +116,12 @@ export async function POST(request: Request) {
   const productMap = new Map(
     restaurant.products.map((product) => [product.id, product]),
   );
+  const requestedQuantities = aggregateCartQuantities(data.items);
   if (
-    data.items.some((item) => {
-      const product = productMap.get(item.productId);
+    [...requestedQuantities].some(([productId, quantity]) => {
+      const product = productMap.get(productId);
       return (
-        !product || (product.stock !== null && product.stock < item.quantity)
+        !product || (product.stock !== null && product.stock < quantity)
       );
     })
   )
@@ -218,6 +220,12 @@ export async function POST(request: Request) {
   let order;
   try {
     order = await prisma.$transaction(async (transaction) => {
+    try {
+      await reserveInventory(transaction, restaurant.id, requestedQuantities, new Set(restaurant.products.filter((product) => product.stock !== null).map((product) => product.id)));
+    } catch (error) {
+      console.warn(JSON.stringify({ level: "warn", context: "inventory", event: "reservation_failed", restaurantId: restaurant.id, timestamp: new Date().toISOString() }));
+      throw error;
+    }
     let customerUserId = session?.user.id ?? null;
     if (customerUserId) {
       await transaction.userRole.upsert({
@@ -324,14 +332,11 @@ export async function POST(request: Request) {
         href: "/dashboard/customers",
         dedupeKey: `customer:${customerUserId}`,
       });
-    for (const value of verified)
+    for (const [productId] of requestedQuantities) {
+      const value = verified.find((entry) => entry.product.id === productId)!;
       if (value.product.stock !== null) {
-        const updatedProduct = await transaction.product.update({
-          where: { id: value.product.id },
-          data: { stock: { decrement: value.item.quantity } },
-          select: { stock: true },
-        });
-        if (updatedProduct.stock !== null && updatedProduct.stock <= 0)
+        const updatedProduct = await transaction.product.findUnique({ where: { id: productId }, select: { stock: true } });
+        if (updatedProduct?.stock !== null && updatedProduct?.stock !== undefined && updatedProduct.stock <= 0)
           await createRestaurantNotification(transaction, {
             restaurantId: restaurant.id,
             type: "OUT_OF_STOCK",
@@ -341,12 +346,13 @@ export async function POST(request: Request) {
             dedupeKey: `out-of-stock:${value.product.id}:${new Date().toISOString().slice(0, 10)}`,
           });
       }
+    }
     return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
     if (
       (error instanceof Error &&
-        ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT"].includes(
+        ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT", "INVENTORY_CONFLICT"].includes(
           error.message,
         )) ||
       (error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -354,7 +360,7 @@ export async function POST(request: Request) {
     )
       return apiError(
         error instanceof Error &&
-          ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT"].includes(
+          ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT", "INVENTORY_CONFLICT"].includes(
             error.message,
           )
           ? error.message

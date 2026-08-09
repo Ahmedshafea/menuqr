@@ -4,7 +4,8 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
+import { startPaidCheckout } from "@/lib/billing-checkout";
 import {
   ensureRestaurantSubscription,
   getPlanCatalog,
@@ -29,16 +30,21 @@ export default async function SubscriptionPage({
 
   async function changePlan(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId, session } = await requireOwner();
     const planCode = String(form.get("planCode") || "");
     const plan = await prisma.plan.findFirst({
       where: { code: planCode, isActive: true },
-      select: { id: true },
+      select: { id: true, price: true, lemonSqueezyVariantId: true },
     });
     if (!plan) redirect("/dashboard/subscription");
     const current = await ensureRestaurantSubscription(restaurantId);
     if (current?.planId === plan.id)
       redirect("/dashboard/subscription?result=current");
+    if (Number(plan.price) > 0) {
+      if (!plan.lemonSqueezyVariantId) redirect("/dashboard/subscription?result=unavailable");
+      const checkoutUrl = await startPaidCheckout({ variantId: plan.lemonSqueezyVariantId, restaurantId, planId: plan.id, userId: session.user.id, email: session.user.email, name: session.user.name });
+      redirect(checkoutUrl);
+    }
     await prisma.$transaction(async (transaction) => {
       await transaction.subscription.updateMany({
         where: {

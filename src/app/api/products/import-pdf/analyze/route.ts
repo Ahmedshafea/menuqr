@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
     return apiError("UNAUTHORIZED", 401);
   if (!(await hasFeature(restaurantId, "PDF_IMPORT"))) return apiError("FEATURE_NOT_AVAILABLE", 403);
-  const limit = rateLimit(`pdf-import-analyze:${restaurantId}`, 3, 15 * 60 * 1000);
+  const limit = await rateLimit(`pdf-import-analyze:${restaurantId}`, 3, 15 * 60 * 1000);
   if (!limit.allowed) return rateLimitError(limit.retryAfter);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success || !parsed.data.path.startsWith(`${restaurantId}/`) || !parsed.data.path.endsWith(".pdf") || parsed.data.path.includes(".."))

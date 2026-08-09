@@ -1,11 +1,13 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { parseImageUrl, parseProductImport, productMatchKey, type ProductImportRow } from "@/lib/product-import";
+import { allowedImageHost } from "@/lib/image-import-security";
 import { revalidateTag } from "next/cache";
 import { apiError, logApiError } from "@/lib/api";
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import { featureLimit } from "@/lib/subscription-plans";
+import { assertTenantQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,7 @@ async function validateImage(row: ProductImportRow) {
     let url = parseImageUrl(row.imageUrl);
     for (let redirects = 0; redirects <= 3; redirects++) {
       if (["localhost", "localhost.localdomain"].includes(url.hostname.toLowerCase())) throw new Error("private_host");
+      if (!allowedImageHost(url.hostname.toLowerCase())) throw new Error("untrusted_host");
       const addresses = await lookup(url.hostname, { all: true });
       if (!addresses.length || addresses.some(({ address }) => privateAddress(address))) throw new Error("private_host");
       const response = await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(6000), headers: { accept: "image/avif,image/webp,image/png,image/jpeg" } });
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
   if (!extension)
     return apiError("UNSUPPORTED_FILE", 400);
   try {
-    const parsed = parseProductImport(await file.arrayBuffer(), extension);
+    const parsed = await parseProductImport(await file.arrayBuffer(), extension);
     if (parsed.errors.length)
       return apiError("INVALID_IMPORT_ROWS", 422, parsed.errors.slice(0, 12));
     if (!parsed.rows.length)
@@ -128,6 +131,7 @@ export async function POST(request: Request) {
     let updated = 0;
     await prisma.$transaction(
       async (tx) => {
+        await assertTenantQuota(tx, restaurantId, "PRODUCT_LIMIT", () => tx.product.count({ where: { restaurantId } }), newProductCount);
         for (const row of parsed.rows) {
           const categoryKey = row.categoryEn.toLowerCase();
           let categoryId =

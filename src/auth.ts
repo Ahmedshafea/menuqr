@@ -3,9 +3,11 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { consumeOtp, OTP_LENGTH } from "@/lib/otp";
+import { consumeOtp, hashOtp, OTP_LENGTH } from "@/lib/otp";
 import { normalizeE164 } from "@/lib/whatsapp";
 import { getCachedUserAccess } from "@/lib/user-access";
+import { rateLimit } from "@/lib/rate-limit";
+import { createHash } from "node:crypto";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -18,6 +20,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .object({ email: z.email(), password: z.string().min(8) })
           .safeParse(raw);
         if (!parsed.success) return null;
+        const loginBucket = createHash("sha256").update(parsed.data.email.toLowerCase()).digest("hex");
+        if (!(await rateLimit(`auth-login:${loginBucket}`, 10, 15 * 60_000)).allowed) return null;
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
           select: {
@@ -54,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success || parsed.data.code.length !== OTP_LENGTH) return null;
         let phone: string;
         try { phone = normalizeE164(parsed.data.phone); } catch { return null; }
+        if (!(await rateLimit(`auth-otp:${hashOtp(phone, "auth-rate-limit")}`, 10, 15 * 60_000)).allowed) return null;
         const matches = await prisma.user.findMany({
           where: { phone: { in: [phone, phone.slice(1)] } },
           take: 2,

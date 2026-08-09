@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 import { hasFeature } from "@/lib/subscription-plans";
 import { addProjectDomain, isVercelDomainApiConfigured, normalizeCustomDomain, publicVerification, removeProjectDomain, verifyProjectDomain } from "@/lib/custom-domains";
 import { RemoveDomainButton } from "@/components/remove-domain-button";
@@ -19,7 +19,7 @@ export default async function CustomDomainPage({ searchParams }: { searchParams:
 
   async function add(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     if (!(await hasFeature(restaurantId, "CUSTOM_DOMAIN"))) redirect("/dashboard/subscription?required=CUSTOM_DOMAIN");
     let domain: string;
     try { domain = normalizeCustomDomain(String(form.get("domain") || "")); }
@@ -44,7 +44,7 @@ export default async function CustomDomainPage({ searchParams }: { searchParams:
 
   async function verify() {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     if (!(await hasFeature(restaurantId, "CUSTOM_DOMAIN"))) redirect("/dashboard/subscription?required=CUSTOM_DOMAIN");
     const current = await prisma.customDomain.findUnique({ where: { restaurantId } });
     if (!current) redirect("/dashboard/domain");
@@ -66,7 +66,7 @@ export default async function CustomDomainPage({ searchParams }: { searchParams:
 
   async function remove() {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     const current = await prisma.customDomain.findUnique({ where: { restaurantId }, select: { domain: true } });
     if (!current) return;
     try { await removeProjectDomain(current.domain); }

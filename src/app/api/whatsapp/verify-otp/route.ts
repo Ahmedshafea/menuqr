@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 const schema = z.object({ phone: z.string().min(8).max(30), code: z.string().regex(/^\d{4,8}$/) });
 
 export async function POST(request: Request) {
-  const limited = rateLimit(`whatsapp-verify:${requestIp(request)}`, 10, 15 * 60_000);
+  const limited = await rateLimit(`whatsapp-verify:${requestIp(request)}`, 10, 15 * 60_000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success || parsed.data.code.length !== OTP_LENGTH) return apiError("INVALID_OTP", 400);

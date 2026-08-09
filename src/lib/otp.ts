@@ -81,9 +81,17 @@ export async function consumeOtp(phone: string, code: string): Promise<OtpVerifi
   }
   if (otp.attempts >= 5) return "attempts_exceeded";
   if (!compareOtp(phone, code, otp.codeHash)) {
-    await prisma.whatsAppOtp.update({ where: { phone }, data: { attempts: { increment: 1 } } });
+    const failed = await prisma.whatsAppOtp.updateMany({ where: { phone, verifiedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: 5 } }, data: { attempts: { increment: 1 } } });
+    if (failed.count !== 1) return "attempts_exceeded";
     return "invalid";
   }
-  await prisma.whatsAppOtp.update({ where: { phone }, data: { verifiedAt: new Date(), codeHash: "invalidated" } });
+  const consumed = await prisma.whatsAppOtp.updateMany({
+    where: { id: otp.id, phone, codeHash: otp.codeHash, verifiedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: 5 } },
+    data: { verifiedAt: new Date(), codeHash: "invalidated" },
+  });
+  if (consumed.count !== 1) {
+    console.warn(JSON.stringify({ level: "warn", context: "otp", event: "consume_conflict", timestamp: new Date().toISOString() }));
+    return "invalid";
+  }
   return "verified";
 }

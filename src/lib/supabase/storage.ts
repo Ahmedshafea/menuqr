@@ -9,7 +9,7 @@ const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/av
 const extensions: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" };
 
 export async function uploadRestaurantImage(input: { bucket: StorageBucket; restaurantId: string; file: File }) {
-  if (!rateLimit(`storage-upload:${input.restaurantId}`, 30, 10 * 60 * 1000).allowed) throw new Error("Too many uploads. Try again later");
+  if (!(await rateLimit(`storage-upload:${input.restaurantId}`, 30, 10 * 60 * 1000)).allowed) throw new Error("Too many uploads. Try again later");
   if (!allowedTypes.has(input.file.type)) throw new Error("Only JPEG, PNG, WebP, and AVIF images are allowed");
   if (input.file.size > 5 * 1024 * 1024) throw new Error("Images must be 5 MB or smaller");
   const path = `${input.restaurantId}/${randomUUID()}.${extensions[input.file.type]}`;

@@ -20,6 +20,9 @@ import { OrderLocationActions } from "@/components/order-location-actions";
 import { AccordionSection } from "@/components/accordion-section";
 import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
 import { hasFeature } from "@/lib/subscription-plans";
+import { adjustInventory, restoreOrderInventory } from "@/lib/inventory";
+import { canTransitionOrder } from "@/lib/order-state";
+import type { OrderStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -120,7 +123,7 @@ export default async function OrderTrackingPage({
       requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       requestHeaders.get("x-real-ip") ||
       "unknown";
-    if (!rateLimit(`order-message:${token}:${ip}`, 20, 10 * 60 * 1000).allowed)
+    if (!(await rateLimit(`order-message:${token}:${ip}`, 20, 10 * 60 * 1000)).allowed)
       return;
     const current = await auth();
     const currentOrder = await prisma.order.findUnique({
@@ -197,10 +200,11 @@ export default async function OrderTrackingPage({
     const itemId = String(form.get("itemId") ?? "");
     const delta = Number(form.get("delta")) === -1 ? -1 : 1;
     await prisma.$transaction(async (tx) => {
-      const item = await tx.orderItem.findFirst({ where: { id: itemId, orderId: order.id }, select: { id: true, quantity: true, productName: true } });
+      const item = await tx.orderItem.findFirst({ where: { id: itemId, orderId: order.id }, select: { id: true, quantity: true, productId: true, isComplimentary: true, productName: true } });
       if (!item) return;
       const quantity = Math.max(1, item.quantity + delta);
       if (quantity === item.quantity) return;
+      await adjustInventory(tx, order.restaurantId, item.productId, quantity - item.quantity);
       await tx.orderItem.update({ where: { id: item.id }, data: { quantity } });
       const total = await recalculateOrder(tx, order.id);
       await tx.orderActionLog.createMany({ data: [
@@ -217,8 +221,9 @@ export default async function OrderTrackingPage({
     const { order, session } = await requireManagedOrder(token);
     const itemId = String(form.get("itemId") ?? "");
     await prisma.$transaction(async (tx) => {
-      const item = await tx.orderItem.findFirst({ where: { id: itemId, orderId: order.id }, select: { id: true, productName: true } });
+      const item = await tx.orderItem.findFirst({ where: { id: itemId, orderId: order.id }, select: { id: true, productId: true, quantity: true, isComplimentary: true, productName: true } });
       if (!item) return;
+      await adjustInventory(tx, order.restaurantId, item.productId, -item.quantity);
       await tx.orderItem.delete({ where: { id: item.id } });
       const total = await recalculateOrder(tx, order.id);
       await tx.orderActionLog.createMany({ data: [
@@ -237,10 +242,12 @@ export default async function OrderTrackingPage({
     const productId = String(form.get("productId") ?? "");
     await prisma.$transaction(async (tx) => {
       const [item, product] = await Promise.all([
-        tx.orderItem.findFirst({ where: { id: itemId, orderId: order.id }, select: { id: true, productName: true } }),
+        tx.orderItem.findFirst({ where: { id: itemId, orderId: order.id }, select: { id: true, productId: true, quantity: true, isComplimentary: true, productName: true } }),
         tx.product.findFirst({ where: { id: productId, restaurantId: order.restaurantId, isAvailable: true }, select: { id: true, name: true, nameAr: true, price: true } }),
       ]);
       if (!item || !product) return;
+      await adjustInventory(tx, order.restaurantId, item.productId, -item.quantity);
+      await adjustInventory(tx, order.restaurantId, product.id, item.quantity);
       await tx.orderItem.update({ where: { id: item.id }, data: { productId: product.id, productName: product.nameAr || product.name, unitPrice: product.price, isComplimentary: false, extras: { deleteMany: {} } } });
       const total = await recalculateOrder(tx, order.id);
       await tx.orderActionLog.createMany({ data: [
@@ -259,6 +266,7 @@ export default async function OrderTrackingPage({
     await prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({ where: { id: productId, restaurantId: order.restaurantId, isAvailable: true }, select: { id: true, name: true, nameAr: true } });
       if (!product) return;
+      await adjustInventory(tx, order.restaurantId, product.id, 1);
       const name = product.nameAr || product.name;
       await tx.orderItem.create({ data: { orderId: order.id, productId: product.id, productName: name, unitPrice: 0, quantity: 1, isComplimentary: true } });
       await tx.orderActionLog.create({ data: { orderId: order.id, userId: session.user.id, action: "COMPLIMENTARY_ADDED", details: { item: name } } });
@@ -292,6 +300,7 @@ export default async function OrderTrackingPage({
         include: { extras: true, options: true },
       });
       if (!item) return;
+      await adjustInventory(tx, order.restaurantId, item.productId, item.quantity);
       await tx.orderItem.create({
         data: {
           orderId: order.id,
@@ -433,12 +442,13 @@ export default async function OrderTrackingPage({
       "FAILED_DELIVERY",
     ] as const;
     if (!allowed.includes(next as (typeof allowed)[number])) return;
+    if (!canTransitionOrder(order.status, next as OrderStatus)) return;
     const changed = await prisma.$transaction(async (tx) => {
       const update = await tx.order.updateMany({
         where: {
           id: order.id,
           restaurantId: order.restaurantId,
-          status: { not: next as (typeof allowed)[number] },
+          status: order.status,
         },
         data: {
           status: next as (typeof allowed)[number],
@@ -449,6 +459,7 @@ export default async function OrderTrackingPage({
         },
       });
       if (update.count === 0) return false;
+      if (["CANCELLED", "REJECTED"].includes(next)) await restoreOrderInventory(tx, order.id, order.restaurantId);
       await tx.orderStatusHistory.create({
         data: {
           orderId: order.id,

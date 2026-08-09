@@ -1,42 +1,45 @@
 import { z } from "zod";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
-import {
-  sendCustomerNotification, sendRestaurantNotification, WhatsAppError,
-  WHATSAPP_NOTIFICATION_TYPES,
-} from "@/lib/whatsapp";
-import type { CustomerNotificationType, RestaurantNotificationType } from "@/types/whatsapp";
+import { publicOrderUrl } from "@/lib/utils";
+import { sendOrderStatusNotification, WhatsAppError } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 
-const customerTypes = new Set<CustomerNotificationType>([
-  "order_received", "order_accepted", "order_preparing", "order_ready", "order_out_for_delivery",
-  "order_delivered", "order_cancelled", "payment_successful", "payment_failed",
-  "review_request",
-]);
 const schema = z.object({
-  type: z.enum(WHATSAPP_NOTIFICATION_TYPES),
-  phone: z.string().min(8).max(30),
-  variables: z.array(z.union([z.string().max(1024), z.number().finite()])).max(20).default([]),
-  language: z.enum(["ar", "en"]).default("ar"),
-});
+  orderId: z.string().cuid(),
+  status: z.enum(["CONFIRMED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"]),
+}).strict();
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user.restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
+  const restaurantId = session?.user.restaurantId;
+  if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
     return apiError("UNAUTHORIZED", 401);
-  const limited = rateLimit(`whatsapp-notifications:${session.user.restaurantId}`, 60, 10 * 60_000);
+  const limited = await rateLimit(`whatsapp-notifications:${restaurantId}`, 60, 10 * 60_000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return apiError("INVALID_NOTIFICATION", 400, parsed.error.flatten());
+  if (!parsed.success) return apiError("INVALID_NOTIFICATION", 400);
+  const order = await prisma.order.findFirst({
+    where: { id: parsed.data.orderId, restaurantId, status: parsed.data.status },
+    select: { id: true, orderNumber: true, customerPhone: true, accessToken: true, status: true, restaurant: { select: { name: true, nameAr: true, locale: true } } },
+  });
+  if (!order) return apiError("ORDER_NOT_FOUND", 404);
   try {
-    const result = customerTypes.has(parsed.data.type as CustomerNotificationType)
-      ? await sendCustomerNotification(parsed.data.type as CustomerNotificationType, parsed.data.phone, parsed.data.variables, parsed.data.language)
-      : await sendRestaurantNotification(parsed.data.type as RestaurantNotificationType, parsed.data.phone, parsed.data.variables, parsed.data.language);
+    const result = await sendOrderStatusNotification({
+      orderId: order.id,
+      status: order.status,
+      orderNumber: order.orderNumber,
+      customerPhone: order.customerPhone,
+      restaurantName: order.restaurant.locale === "ar" && order.restaurant.nameAr ? order.restaurant.nameAr : order.restaurant.name,
+      customerOrderUrl: publicOrderUrl(order.accessToken),
+      language: order.restaurant.locale === "ar" ? "ar" : "en",
+    });
     return Response.json(result);
   } catch (error) {
-    logApiError("whatsapp-notification", error, { type: parsed.data.type, restaurantId: session.user.restaurantId });
+    logApiError("whatsapp-notification", error, { orderId: order.id, restaurantId });
     if (error instanceof WhatsAppError) return apiError(error.code, error.status, error.retryAfter ? { retryAfter: error.retryAfter } : undefined);
     return apiError("WHATSAPP_SEND_FAILED", 500);
   }

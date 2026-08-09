@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 import { CloseDetailsButton } from "@/components/close-details-button";
 import { featureLimit } from "@/lib/subscription-plans";
+import { assertTenantQuota } from "@/lib/quota";
 export const dynamic = "force-dynamic";
 export default async function TeamPage({
   searchParams,
@@ -35,7 +36,7 @@ export default async function TeamPage({
   const canAddMember = memberLimit === null || memberLimit < 0 || total < memberLimit;
   async function addMember(form: FormData) {
     "use server";
-    const { restaurantId } = await requireTenant();
+    const { restaurantId } = await requireOwner();
     const [limit, currentCount] = await Promise.all([
       featureLimit(restaurantId, "TEAM_MEMBER_LIMIT"),
       prisma.restaurantMember.count({ where: { restaurantId } }),
@@ -54,14 +55,16 @@ export default async function TeamPage({
       select: { id: true, restaurantMemberships: { where: { restaurantId }, select: { id: true } } },
     });
     if (exists?.restaurantMemberships.length) redirect("/dashboard/team?result=exists");
-    if (exists) {
-      await prisma.$transaction([
-        prisma.restaurantMember.create({ data: { userId: exists.id, restaurantId, role: "STAFF" } }),
-        prisma.userRole.upsert({ where: { userId_role: { userId: exists.id, role: "STAFF" } }, create: { userId: exists.id, role: "STAFF" }, update: {} }),
-      ]);
-    } else {
-      await prisma.user.create({ data: { name, email, passwordHash: await hash(password, 12), emailVerified: new Date(), roles: { create: { role: "STAFF" } }, restaurantMemberships: { create: { restaurantId, role: "STAFF" } } } });
-    }
+    const passwordHash = exists ? null : await hash(password, 12);
+    await prisma.$transaction(async (tx) => {
+      await assertTenantQuota(tx, restaurantId, "TEAM_MEMBER_LIMIT", () => tx.restaurantMember.count({ where: { restaurantId } }));
+      if (exists) {
+        await tx.restaurantMember.create({ data: { userId: exists.id, restaurantId, role: "STAFF" } });
+        await tx.userRole.upsert({ where: { userId_role: { userId: exists.id, role: "STAFF" } }, create: { userId: exists.id, role: "STAFF" }, update: {} });
+      } else {
+        await tx.user.create({ data: { name, email, passwordHash: passwordHash!, emailVerified: new Date(), roles: { create: { role: "STAFF" } }, restaurantMemberships: { create: { restaurantId, role: "STAFF" } } } });
+      }
+    });
     revalidatePath("/dashboard/team");
     redirect("/dashboard/team?result=created");
   }

@@ -37,6 +37,7 @@ model User {
   platformSettingsUpdated PlatformSetting[]            @relation("PlatformSettingUpdatedBy")
   featureFlagsUpdated     FeatureFlag[]                @relation("FeatureFlagUpdatedBy")
   homepageSectionsUpdated HomepageSection[]            @relation("HomepageSectionUpdatedBy")
+  billingCheckoutIntents  BillingCheckoutIntent[]
 
   @@index([isActive, createdAt])
 }
@@ -144,55 +145,56 @@ model PasswordResetToken {
 }
 
 model Restaurant {
-  id                String                       @id @default(cuid())
-  name              String
-  nameAr            String?
-  slug              String                       @unique
-  description       String?
-  email             String?
-  phone             String?
-  whatsapp          String
-  logoUrl           String?
-  coverUrl          String?
-  primaryColor      String                       @default("#e85d2a")
-  accentColor       String                       @default("#f6c453")
-  currency          String                       @default("EGP")
-  locale            String                       @default("en")
-  isActive          Boolean                      @default(true)
-  createdAt         DateTime                     @default(now())
-  updatedAt         DateTime                     @updatedAt
-  address           String?
-  governorate       String?
-  city              String?
-  district          String?
-  area              String?
-  street            String?
-  postalCode        String?
-  descriptionAr     String?
-  mapUrl            String?
-  facebookUrl       String?
-  instagramUrl      String?
-  analytics         AnalyticsEvent[]
-  auditLogs         AuditLog[]
-  branches          Branch[]
-  categories        Category[]
-  customerFavorites CustomerFavoriteRestaurant[]
-  orders            Order[]
-  products          Product[]
-  members           RestaurantMember[]
-  settings          Setting?
-  subscriptions     Subscription[]
-  customDomain      CustomDomain?
-  notifications     RestaurantNotification[]
-  optionGroups      ProductOptionGroup[]
-  options           ProductOption[]
-  drivers           DeliveryDriver[]
-  reviews           RestaurantReview[]
-  latitude          Decimal?                     @db.Decimal(10, 7)
-  longitude         Decimal?                     @db.Decimal(10, 7)
-  promotions        Promotion[]
-  coupons           Coupon[]
-  promotionUsages   PromotionUsage[]
+  id                     String                       @id @default(cuid())
+  name                   String
+  nameAr                 String?
+  slug                   String                       @unique
+  description            String?
+  email                  String?
+  phone                  String?
+  whatsapp               String
+  logoUrl                String?
+  coverUrl               String?
+  primaryColor           String                       @default("#e85d2a")
+  accentColor            String                       @default("#f6c453")
+  currency               String                       @default("EGP")
+  locale                 String                       @default("en")
+  isActive               Boolean                      @default(true)
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  address                String?
+  governorate            String?
+  city                   String?
+  district               String?
+  area                   String?
+  street                 String?
+  postalCode             String?
+  descriptionAr          String?
+  mapUrl                 String?
+  facebookUrl            String?
+  instagramUrl           String?
+  analytics              AnalyticsEvent[]
+  auditLogs              AuditLog[]
+  branches               Branch[]
+  categories             Category[]
+  customerFavorites      CustomerFavoriteRestaurant[]
+  orders                 Order[]
+  products               Product[]
+  members                RestaurantMember[]
+  settings               Setting?
+  subscriptions          Subscription[]
+  customDomain           CustomDomain?
+  notifications          RestaurantNotification[]
+  optionGroups           ProductOptionGroup[]
+  options                ProductOption[]
+  drivers                DeliveryDriver[]
+  reviews                RestaurantReview[]
+  latitude               Decimal?                     @db.Decimal(10, 7)
+  longitude              Decimal?                     @db.Decimal(10, 7)
+  promotions             Promotion[]
+  coupons                Coupon[]
+  promotionUsages        PromotionUsage[]
+  billingCheckoutIntents BillingCheckoutIntent[]
 }
 
 model Branch {
@@ -317,58 +319,59 @@ model Extra {
 }
 
 model Order {
-  id                 String               @id @default(cuid())
-  orderNumber        String               @unique
-  customerName       String
-  customerPhone      String
-  deliveryAddress    String?
-  deliveryLatitude   Decimal?             @db.Decimal(10, 7)
-  deliveryLongitude  Decimal?             @db.Decimal(10, 7)
-  street             String?
-  district           String?
-  city               String?
-  governorate        String?
-  country            String?
-  postalCode         String?
-  buildingName       String?
-  floor              String?
-  apartment          String?
-  landmark           String?
-  deliveryNotes      String?
-  notes              String?
-  subtotal           Decimal              @db.Decimal(10, 2)
-  discountAmount     Decimal              @default(0) @db.Decimal(10, 2)
-  deliveryFee        Decimal              @default(0) @db.Decimal(10, 2)
-  serviceFee         Decimal              @default(0) @db.Decimal(10, 2)
-  taxAmount          Decimal              @default(0) @db.Decimal(10, 2)
-  total              Decimal              @db.Decimal(10, 2)
-  status             OrderStatus          @default(NEW)
-  restaurantId       String
-  branchId           String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  accessToken        String               @unique
-  customerUserId     String?
-  branch             Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer           User?                @relation("CustomerOrders", fields: [customerUserId], references: [id], map: "Order_customerId_fkey")
-  restaurant         Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  items              OrderItem[]
-  messages           OrderMessage[]
-  statusHistory      OrderStatusHistory[]
-  actionLogs         OrderActionLog[]
-  driver             DeliveryDriver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  driverId           String?
-  fulfillmentType    FulfillmentType      @default(DELIVERY)
-  driverAssignedAt   DateTime?
-  outForDeliveryAt   DateTime?
-  deliveredAt        DateTime?
-  estimatedArrivalAt DateTime?
-  review             RestaurantReview?
-  promotionOrders    PromotionOrder[]
-  promotionUsages    PromotionUsage[]
-  couponCode         String?
-  originalSubtotal   Decimal              @default(0) @db.Decimal(10, 2)
-  finalSubtotal      Decimal              @default(0) @db.Decimal(10, 2)
+  id                  String               @id @default(cuid())
+  orderNumber         String               @unique
+  customerName        String
+  customerPhone       String
+  deliveryAddress     String?
+  deliveryLatitude    Decimal?             @db.Decimal(10, 7)
+  deliveryLongitude   Decimal?             @db.Decimal(10, 7)
+  street              String?
+  district            String?
+  city                String?
+  governorate         String?
+  country             String?
+  postalCode          String?
+  buildingName        String?
+  floor               String?
+  apartment           String?
+  landmark            String?
+  deliveryNotes       String?
+  notes               String?
+  subtotal            Decimal              @db.Decimal(10, 2)
+  discountAmount      Decimal              @default(0) @db.Decimal(10, 2)
+  deliveryFee         Decimal              @default(0) @db.Decimal(10, 2)
+  serviceFee          Decimal              @default(0) @db.Decimal(10, 2)
+  taxAmount           Decimal              @default(0) @db.Decimal(10, 2)
+  total               Decimal              @db.Decimal(10, 2)
+  status              OrderStatus          @default(NEW)
+  restaurantId        String
+  branchId            String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  accessToken         String               @unique
+  customerUserId      String?
+  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer            User?                @relation("CustomerOrders", fields: [customerUserId], references: [id], map: "Order_customerId_fkey")
+  restaurant          Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items               OrderItem[]
+  messages            OrderMessage[]
+  statusHistory       OrderStatusHistory[]
+  actionLogs          OrderActionLog[]
+  driver              DeliveryDriver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId            String?
+  fulfillmentType     FulfillmentType      @default(DELIVERY)
+  driverAssignedAt    DateTime?
+  outForDeliveryAt    DateTime?
+  deliveredAt         DateTime?
+  estimatedArrivalAt  DateTime?
+  review              RestaurantReview?
+  promotionOrders     PromotionOrder[]
+  promotionUsages     PromotionUsage[]
+  couponCode          String?
+  originalSubtotal    Decimal              @default(0) @db.Decimal(10, 2)
+  finalSubtotal       Decimal              @default(0) @db.Decimal(10, 2)
+  inventoryRestoredAt DateTime?
 
   @@index([restaurantId, createdAt])
   @@index([customerUserId, createdAt])
@@ -444,28 +447,30 @@ model OrderItemExtra {
 }
 
 model Plan {
-  id               String            @id @default(cuid())
-  code             String            @unique
-  name             String            @unique
-  nameAr           String?
-  description      String?
-  descriptionAr    String?
-  price            Decimal           @db.Decimal(10, 2)
-  currency         String            @default("EGP")
-  interval         BillingInterval   @default(MONTHLY)
-  displayOrder     Int               @default(0)
-  isActive         Boolean           @default(true)
-  isRecommended    Boolean           @default(false)
-  maxProducts      Int
-  maxBranches      Int
-  maxStaff         Int
-  analyticsEnabled Boolean           @default(false)
-  customDomain     Boolean           @default(false)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  subscriptions    Subscription[]
-  features         PlanFeature[]
-  launchPromotions LaunchPromotion[]
+  id                     String                  @id @default(cuid())
+  code                   String                  @unique
+  name                   String                  @unique
+  nameAr                 String?
+  description            String?
+  descriptionAr          String?
+  price                  Decimal                 @db.Decimal(10, 2)
+  currency               String                  @default("EGP")
+  interval               BillingInterval         @default(MONTHLY)
+  displayOrder           Int                     @default(0)
+  isActive               Boolean                 @default(true)
+  isRecommended          Boolean                 @default(false)
+  maxProducts            Int
+  maxBranches            Int
+  maxStaff               Int
+  analyticsEnabled       Boolean                 @default(false)
+  customDomain           Boolean                 @default(false)
+  lemonSqueezyVariantId  String?                 @unique
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  subscriptions          Subscription[]
+  features               PlanFeature[]
+  launchPromotions       LaunchPromotion[]
+  billingCheckoutIntents BillingCheckoutIntent[]
 }
 
 model CustomDomain {
@@ -528,35 +533,87 @@ model LaunchPromotion {
 }
 
 model Subscription {
-  id                String             @id @default(cuid())
-  status            SubscriptionStatus @default(TRIALING)
-  startsAt          DateTime           @default(now())
-  endsAt            DateTime?
-  restaurantId      String
-  planId            String
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  trialEndsAt       DateTime?
-  launchPromotionId String?
-  launchPromotion   LaunchPromotion?   @relation(fields: [launchPromotionId], references: [id])
-  payments          Payment[]
-  plan              Plan               @relation(fields: [planId], references: [id])
-  restaurant        Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id                     String             @id @default(cuid())
+  status                 SubscriptionStatus @default(TRIALING)
+  startsAt               DateTime           @default(now())
+  endsAt                 DateTime?
+  restaurantId           String
+  planId                 String
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  trialEndsAt            DateTime?
+  launchPromotionId      String?
+  provider               String?
+  providerCustomerId     String?
+  providerSubscriptionId String?            @unique
+  providerOrderId        String?
+  providerVariantId      String?
+  providerStatus         String?
+  providerUpdatedAt      DateTime?
+  launchPromotion        LaunchPromotion?   @relation(fields: [launchPromotionId], references: [id])
+  payments               Payment[]
+  plan                   Plan               @relation(fields: [planId], references: [id])
+  restaurant             Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId, status])
   @@index([launchPromotionId])
 }
 
 model Payment {
-  id             String        @id @default(cuid())
-  amount         Decimal       @db.Decimal(10, 2)
-  currency       String        @default("EGP")
-  status         PaymentStatus @default(PENDING)
-  provider       String?
-  reference      String?       @unique
-  subscriptionId String
-  createdAt      DateTime      @default(now())
-  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  id                     String        @id @default(cuid())
+  amount                 Decimal       @db.Decimal(10, 2)
+  currency               String        @default("EGP")
+  status                 PaymentStatus @default(PENDING)
+  provider               String?
+  reference              String?       @unique
+  providerOrderId        String?
+  providerSubscriptionId String?
+  providerEventId        String?
+  subscriptionId         String
+  createdAt              DateTime      @default(now())
+  subscription           Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+}
+
+model BillingEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  eventName       String
+  resourceId      String?
+  occurredAt      DateTime?
+  processedAt     DateTime  @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([provider, resourceId, occurredAt])
+}
+
+model BillingCheckoutIntent {
+  id               String                      @id @default(cuid())
+  publicIntentId   String                      @unique
+  restaurantId     String
+  initiatingUserId String
+  planId           String
+  variantId        String
+  status           BillingCheckoutIntentStatus @default(PENDING)
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime                    @default(now())
+  restaurant       Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  initiatingUser   User                        @relation(fields: [initiatingUserId], references: [id], onDelete: Cascade)
+  plan             Plan                        @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([restaurantId, status, expiresAt])
+  @@index([initiatingUserId, status])
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }
 
 model Setting {
@@ -1094,6 +1151,12 @@ enum PaymentStatus {
 enum BillingInterval {
   MONTHLY
   YEARLY
+}
+
+enum BillingCheckoutIntentStatus {
+  PENDING
+  CONSUMED
+  FAILED
 }
 
 enum FeatureValueType {

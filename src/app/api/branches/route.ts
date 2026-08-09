@@ -4,8 +4,9 @@ import { apiError } from "@/lib/api";
 import { branchListQuerySchema, branchSchema } from "@/lib/branch-validation";
 import { branchWriteData } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
-import { requireTenant } from "@/lib/tenant";
+import { requireOwner, requireTenant } from "@/lib/tenant";
 import { featureLimit } from "@/lib/subscription-plans";
+import { assertTenantQuota } from "@/lib/quota";
 
 export async function GET(request: Request) {
   const { restaurantId } = await requireTenant();
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { restaurantId } = await requireTenant();
+  const { restaurantId } = await requireOwner();
   const [limit, currentCount] = await Promise.all([
     featureLimit(restaurantId, "BRANCH_LIMIT"),
     prisma.branch.count({ where: { restaurantId } }),
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
     return apiError("INVALID_BRANCH", 400, parsed.error.flatten().fieldErrors);
   try {
     const branch = await prisma.$transaction(async (transaction) => {
+      await assertTenantQuota(transaction, restaurantId, "BRANCH_LIMIT", () => transaction.branch.count({ where: { restaurantId } }));
       const created = await transaction.branch.create({
         data: { restaurantId, ...branchWriteData(parsed.data) },
         select: { id: true, slug: true },
@@ -84,6 +86,7 @@ export async function POST(request: Request) {
     revalidateTag("public-menu");
     return Response.json(branch, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "PLAN_LIMIT_REACHED") return apiError("PLAN_LIMIT_REACHED", 403);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
       return apiError("BRANCH_SLUG_EXISTS", 409);
     throw error;

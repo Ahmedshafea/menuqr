@@ -22,7 +22,7 @@ const schema = z
 
 export async function POST(request: Request) {
   const ip = requestIp(request);
-  const limited = rateLimit(`password-reset:${ip}`, 5, 15 * 60_000);
+  const limited = await rateLimit(`password-reset:${ip}`, 5, 15 * 60_000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success || parsed.data.code.length !== OTP_LENGTH)

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   debug(requestId, "STEP_1_REQUEST_RECEIVED", {
     contentType: request.headers.get("content-type"),
   });
-  const limited = rateLimit(`whatsapp-otp:${requestIp(request)}`, 5, 15 * 60_000);
+  const limited = await rateLimit(`whatsapp-otp:${requestIp(request)}`, 5, 15 * 60_000);
   if (!limited.allowed) {
     debug(requestId, "STOP_RATE_LIMITED", {
       retryAfter: limited.retryAfter,
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       return apiError("WHATSAPP_NOT_CONFIGURED", 503);
     }
 
-    const phoneLimit = rateLimit(`whatsapp-otp-phone:${hashOtp(phone, "rate-limit")}`, 3, 15 * 60_000);
+    const phoneLimit = await rateLimit(`whatsapp-otp-phone:${hashOtp(phone, "rate-limit")}`, 3, 15 * 60_000);
     if (!phoneLimit.allowed) {
       debug(requestId, "STOP_PHONE_RATE_LIMITED", {
         retryAfter: phoneLimit.retryAfter,
