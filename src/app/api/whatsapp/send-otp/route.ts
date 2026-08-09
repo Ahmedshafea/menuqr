@@ -153,20 +153,10 @@ export async function POST(request: Request) {
     });
     logApiError("whatsapp-send-otp", error, { requestId });
     if (error instanceof WhatsAppError)
-      return apiError(error.code, error.status, {
+      return apiError("OTP_SEND_FAILED", error.status >= 500 ? 503 : 502, {
         ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}),
-        ...(error.meta
-          ? {
-              meta: {
-                httpStatus: error.meta.httpStatus,
-                code: error.meta.code,
-                subcode: error.meta.subcode,
-                message: error.meta.message,
-              },
-            }
-          : {}),
         requestId,
       });
-    return apiError(error instanceof Error ? error.message : "OTP_SEND_FAILED", 500);
+    return apiError("OTP_SEND_FAILED", 503, { requestId });
   }
 }

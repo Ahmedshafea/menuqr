@@ -9,6 +9,7 @@ import { DashboardDisclosure, RecordDisclosure } from "@/components/dashboard-di
 import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
 import { hasFeature } from "@/lib/subscription-plans";
 import { applicationUrl, publicOrderUrl } from "@/lib/utils";
+import { transitionOrder } from "@/lib/order-lifecycle";
 export const dynamic = "force-dynamic";
 const statuses = [
   "NEW",
@@ -82,55 +83,10 @@ export default async function OrdersPage({
     const id = String(form.get("id"));
     const next = String(form.get("status")) as OrderStatus;
     if (!statuses.includes(next)) return;
-    const order = await prisma.order.findFirst({ where: { id, restaurantId }, select: { id: true,driverId:true,customerPhone:true,orderNumber:true,accessToken:true } });
-    if (!order||next==="ASSIGNED_TO_DRIVER"&&!order.driverId) return;
-    const changed = await prisma.$transaction(async (tx) => {
-      const update = await tx.order.updateMany({
-        where: { id, restaurantId, status: { not: next } },
-        data: {
-          status: next,
-          ...(next === "OUT_FOR_DELIVERY"
-            ? { outForDeliveryAt: new Date() }
-            : {}),
-          ...(next === "DELIVERED" || next === "COMPLETED"
-            ? { deliveredAt: new Date() }
-            : {}),
-        },
-      });
-      if (update.count === 0) return false;
-      await tx.orderStatusHistory.create({
-        data: { orderId: id, status: next, userId: session.user.id },
-      });
-      await tx.orderActionLog.create({
-        data: {
-          orderId: id,
-          userId: session.user.id,
-          action: "STATUS_UPDATED",
-          details: { status: next },
-        },
-      });
-      if (
-        order.driverId &&
-        (next === "DELIVERED" ||
-          next === "COMPLETED" ||
-          next === "FAILED_DELIVERY")
-      )
-        await tx.deliveryDriver.update({
-          where: { id: order.driverId },
-          data: { status: "AVAILABLE" },
-        });
-      if (next === "DELIVERED")
-        await tx.restaurantNotification.create({
-          data: {
-            restaurantId,
-            type: "DELIVERY_COMPLETED",
-            title: "Delivery completed",
-            href: `/order/${order.accessToken}`,
-          },
-        });
-      return true;
-    });
-    if (changed && await hasFeature(restaurantId, "WHATSAPP_ORDERS"))
+    const result = await transitionOrder({ orderId: id, restaurantId, actorUserId: session.user.id, actorRoles: session.user.roles, next });
+    if (!result.changed) return;
+    const order = result.order;
+    if (await hasFeature(restaurantId, "WHATSAPP_ORDERS"))
       await sendOrderStatusNotification({
         orderId: order.id,
         status: next,
@@ -143,7 +99,7 @@ export default async function OrdersPage({
         customerOrderUrl: publicOrderUrl(order.accessToken),
         language: restaurant.locale === "ar" ? "ar" : "en",
       });
-    if (changed && next === "COMPLETED" && await hasFeature(restaurantId, "REVIEWS") && await hasFeature(restaurantId, "WHATSAPP_ORDERS"))
+    if (next === "COMPLETED" && await hasFeature(restaurantId, "REVIEWS") && await hasFeature(restaurantId, "WHATSAPP_ORDERS"))
       await sendReviewRequest({
         orderId: order.id,
         orderNumber: order.orderNumber,

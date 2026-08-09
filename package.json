@@ -31,6 +31,7 @@
     "react-dom": "19.1.0",
     "react-icons": "^5.7.0",
     "read-excel-file": "9.3.8",
+    "sharp": "0.35.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

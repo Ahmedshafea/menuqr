@@ -1,7 +1,14 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { createHash } from "node:crypto";
 
 type RateLimitResult = { allowed: boolean; remaining: number; retryAfter: number };
+
+export function loginRateLimitKeys(email: string, ip: string) {
+  const identity = createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+  const client = createHash("sha256").update(ip || "unknown").digest("hex");
+  return { account: `auth-login-account:${identity}`, client: `auth-login-ip:${client}`, pair: `auth-login-pair:${identity}:${client}` };
+}
 
 export async function rateLimit(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
   const rows = await prisma.$queryRaw<Array<{ count: number; resetAt: Date }>>`
@@ -18,6 +25,11 @@ export async function rateLimit(key: string, limit: number, windowMs: number): P
   const result = { allowed: current.count <= limit, remaining: Math.max(0, limit - current.count), retryAfter };
   if (!result.allowed) console.warn(JSON.stringify({ level: "warn", context: "rate-limit", event: "request_rejected", bucket: key.split(":", 1)[0], timestamp: new Date().toISOString() }));
   return result;
+}
+
+export async function clearRateLimit(...keys: string[]) {
+  if (!keys.length) return;
+  await prisma.rateLimitBucket.deleteMany({ where: { key: { in: keys } } });
 }
 
 export function requestIp(request: Request) {

@@ -20,8 +20,8 @@ import { OrderLocationActions } from "@/components/order-location-actions";
 import { AccordionSection } from "@/components/accordion-section";
 import { sendOrderStatusNotification, sendReviewRequest } from "@/lib/whatsapp";
 import { hasFeature } from "@/lib/subscription-plans";
-import { adjustInventory, restoreOrderInventory } from "@/lib/inventory";
-import { canTransitionOrder } from "@/lib/order-state";
+import { adjustInventory } from "@/lib/inventory";
+import { transitionOrder } from "@/lib/order-lifecycle";
 import type { OrderStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -442,52 +442,9 @@ export default async function OrderTrackingPage({
       "FAILED_DELIVERY",
     ] as const;
     if (!allowed.includes(next as (typeof allowed)[number])) return;
-    if (!canTransitionOrder(order.status, next as OrderStatus)) return;
-    const changed = await prisma.$transaction(async (tx) => {
-      const update = await tx.order.updateMany({
-        where: {
-          id: order.id,
-          restaurantId: order.restaurantId,
-          status: order.status,
-        },
-        data: {
-          status: next as (typeof allowed)[number],
-          ...(next === "OUT_FOR_DELIVERY"
-            ? { outForDeliveryAt: new Date() }
-            : {}),
-          ...(next === "DELIVERED" ? { deliveredAt: new Date() } : {}),
-        },
-      });
-      if (update.count === 0) return false;
-      if (["CANCELLED", "REJECTED"].includes(next)) await restoreOrderInventory(tx, order.id, order.restaurantId);
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: order.id,
-          status: next as (typeof allowed)[number],
-          userId: session.user.id,
-        },
-      });
-      await tx.orderActionLog.create({
-        data: {
-          orderId: order.id,
-          userId: session.user.id,
-          action: "STATUS_CHANGED",
-          details: { from: order.status, to: next },
-        },
-      });
-      if (
-        order.driverId &&
-        ["DELIVERED", "COMPLETED", "CANCELLED", "FAILED_DELIVERY"].includes(
-          next,
-        )
-      )
-        await tx.deliveryDriver.update({
-          where: { id: order.driverId },
-          data: { status: "AVAILABLE" },
-        });
-      return true;
-    });
-    if (changed && await hasFeature(order.restaurantId, "WHATSAPP_ORDERS"))
+    const result = await transitionOrder({ orderId: order.id, restaurantId: order.restaurantId, actorUserId: session.user.id, actorRoles: session.user.roles, next: next as OrderStatus, action: "STATUS_CHANGED" });
+    if (!result.changed) return;
+    if (await hasFeature(order.restaurantId, "WHATSAPP_ORDERS"))
       await sendOrderStatusNotification({
         orderId: order.id,
         status: next as (typeof allowed)[number],
@@ -500,7 +457,7 @@ export default async function OrderTrackingPage({
         customerOrderUrl: publicOrderUrl(order.accessToken),
         language: order.restaurant.locale === "ar" ? "ar" : "en",
       });
-    if (changed && next === "COMPLETED" && await hasFeature(order.restaurantId, "REVIEWS") && await hasFeature(order.restaurantId, "WHATSAPP_ORDERS"))
+    if (next === "COMPLETED" && await hasFeature(order.restaurantId, "REVIEWS") && await hasFeature(order.restaurantId, "WHATSAPP_ORDERS"))
       await sendReviewRequest({
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -552,7 +509,7 @@ export default async function OrderTrackingPage({
     });
     redirect(whatsappUrl(current.customerPhone, message));
   }
-  async function assignDriver(form:FormData){"use server";const{order,session}=await requireManagedOrder(token);const driverId=String(form.get("driverId"));const driver=await prisma.deliveryDriver.findFirst({where:{id:driverId,restaurantId:order.restaurantId,status:{not:"OFFLINE"}},select:{id:true,name:true}});if(!driver)return;await prisma.$transaction(async tx=>{await tx.order.update({where:{id:order.id},data:{driverId:driver.id,status:"ASSIGNED_TO_DRIVER",driverAssignedAt:new Date()}});await tx.deliveryDriver.update({where:{id:driver.id},data:{status:"BUSY"}});await tx.orderStatusHistory.create({data:{orderId:order.id,status:"ASSIGNED_TO_DRIVER",userId:session.user.id}});await tx.orderActionLog.create({data:{orderId:order.id,userId:session.user.id,action:"DRIVER_ASSIGNED",details:{driver:driver.name}}});await createRestaurantNotification(tx,{restaurantId:order.restaurantId,type:"DRIVER_ASSIGNED",title:"Driver assigned",body:driver.name,href:`/order/${token}`,dedupeKey:`driver:${order.id}:${Date.now()}`})});revalidatePath(`/order/${token}`);}
+  async function assignDriver(form:FormData){"use server";const{order,session}=await requireManagedOrder(token);const driverId=String(form.get("driverId"));await transitionOrder({orderId:order.id,restaurantId:order.restaurantId,actorUserId:session.user.id,actorRoles:session.user.roles,next:"ASSIGNED_TO_DRIVER",driverId,action:"DRIVER_ASSIGNED"});revalidatePath(`/order/${token}`);}
   async function submitReview(form:FormData){"use server";const current=await prisma.order.findUnique({where:{accessToken:token},select:{id:true,restaurantId:true,customerUserId:true,status:true,review:{select:{id:true}}}});if(!current||current.status!=="COMPLETED"||current.review||!(await hasFeature(current.restaurantId,"REVIEWS")))return;const score=(key:string)=>Math.max(1,Math.min(5,Number(form.get(key))||0));const overall=score("overall");if(!overall)return;await prisma.$transaction(async tx=>{await tx.restaurantReview.create({data:{restaurantId:current.restaurantId,orderId:current.id,customerUserId:current.customerUserId,foodQuality:score("foodQuality"),deliverySpeed:score("deliverySpeed"),packaging:score("packaging"),overall,comment:String(form.get("comment")||"").trim().slice(0,1000)||null}});await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"NEW_REVIEW",title:overall<=2?"Low customer rating":"New customer review",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`review:${current.id}`});if(overall<=2)await createRestaurantNotification(tx,{restaurantId:current.restaurantId,type:"LOW_RATING",title:"Low customer rating",body:`${overall}/5`,href:"/dashboard/reviews",dedupeKey:`low-review:${current.id}`})});revalidatePath(`/order/${token}`);}
 
   const timelineStatuses = [

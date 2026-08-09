@@ -6,8 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { consumeOtp, hashOtp, OTP_LENGTH } from "@/lib/otp";
 import { normalizeE164 } from "@/lib/whatsapp";
 import { getCachedUserAccess } from "@/lib/user-access";
-import { rateLimit } from "@/lib/rate-limit";
-import { createHash } from "node:crypto";
+import { clearRateLimit, loginRateLimitKeys, rateLimit, requestIp } from "@/lib/rate-limit";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -15,13 +14,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: { email: {}, password: {} },
-      async authorize(raw) {
+      async authorize(raw, request) {
         const parsed = z
           .object({ email: z.email(), password: z.string().min(8) })
           .safeParse(raw);
         if (!parsed.success) return null;
-        const loginBucket = createHash("sha256").update(parsed.data.email.toLowerCase()).digest("hex");
-        if (!(await rateLimit(`auth-login:${loginBucket}`, 10, 15 * 60_000)).allowed) return null;
+        const buckets = loginRateLimitKeys(parsed.data.email, requestIp(request));
+        const [clientLimit, pairLimit] = await Promise.all([
+          rateLimit(buckets.client, 50, 15 * 60_000),
+          rateLimit(buckets.pair, 10, 15 * 60_000),
+        ]);
+        if (!clientLimit.allowed || !pairLimit.allowed) return null;
+        await rateLimit(buckets.account, 100, 60 * 60_000);
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
           select: {
@@ -40,6 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!user?.isActive || !(await compare(parsed.data.password, user.passwordHash)))
           return null;
+        await clearRateLimit(buckets.account, buckets.pair);
         return {
           id: user.id,
           name: user.name,
