@@ -13,6 +13,7 @@ model User {
   name                    String
   email                   String                       @unique
   passwordHash            String
+  sessionVersion          Int                          @default(0)
   emailVerified           DateTime?
   image                   String?
   createdAt               DateTime                     @default(now())
@@ -20,7 +21,6 @@ model User {
   phone                   String?
   phoneVerifiedAt         DateTime?
   language                String                       @default("ar")
-  role                    String?
   isActive                Boolean                      @default(true)
   auditLogs               AuditLog[]
   customerProfile         CustomerProfile?
@@ -372,7 +372,9 @@ model Order {
   originalSubtotal    Decimal              @default(0) @db.Decimal(10, 2)
   finalSubtotal       Decimal              @default(0) @db.Decimal(10, 2)
   inventoryRestoredAt DateTime?
+  clientRequestId     String?
 
+  @@unique([restaurantId, clientRequestId])
   @@index([restaurantId, createdAt])
   @@index([customerUserId, createdAt])
   @@index([restaurantId, status, createdAt])
@@ -614,6 +616,19 @@ model RateLimitBucket {
   updatedAt DateTime @updatedAt
 
   @@index([resetAt])
+}
+
+model ImportOperationLease {
+  key          String   @id
+  userId       String
+  restaurantId String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@index([restaurantId, expiresAt])
+  @@index([userId, expiresAt])
 }
 
 model Setting {

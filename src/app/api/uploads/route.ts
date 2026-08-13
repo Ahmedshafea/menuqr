@@ -1,30 +1,20 @@
-import { auth } from "@/auth";
 import {
   STORAGE_BUCKETS,
   deleteRestaurantImage,
   uploadRestaurantImage,
   type StorageBucket,
 } from "@/lib/supabase/storage";
-import type { Session } from "next-auth";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit, requestIp } from "@/lib/rate-limit";
+import { authorizeTenantApi } from "@/lib/current-authorization";
 
 function isBucket(value: string): value is StorageBucket {
   return STORAGE_BUCKETS.includes(value as StorageBucket);
 }
-function tenant(session: Session | null) {
-  if (
-    !session?.user ||
-    !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role))
-  )
-    return null;
-  return session.user.restaurantId;
-}
-
 export async function POST(request: Request) {
-  const session = await auth();
-  const restaurantId = tenant(session);
-  if (!restaurantId) return apiError("UNAUTHORIZED", 401);
+  const access = await authorizeTenantApi();
+  if (!access.ok) return access.response;
+  const { restaurantId } = access;
   const limited = await rateLimit(
     `uploads:${restaurantId}:${requestIp(request)}`,
     20,
@@ -52,9 +42,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await auth();
-  const restaurantId = tenant(session);
-  if (!restaurantId) return apiError("UNAUTHORIZED", 401);
+  const access = await authorizeTenantApi();
+  if (!access.ok) return access.response;
+  const { restaurantId } = access;
   const body = (await request.json().catch(() => null)) as {
     bucket?: string;
     path?: string;

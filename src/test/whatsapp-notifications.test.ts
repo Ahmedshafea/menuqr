@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(), findFirst: vi.fn(), send: vi.fn(), rateLimit: vi.fn(),
+  access: vi.fn(), findFirst: vi.fn(), send: vi.fn(), rateLimit: vi.fn(),
 }));
-vi.mock("@/auth", () => ({ auth: mocks.auth }));
+vi.mock("@/lib/current-authorization", () => ({ authorizeTenantApi: mocks.access }));
 vi.mock("@/lib/prisma", () => ({ prisma: { order: { findFirst: mocks.findFirst } } }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: mocks.rateLimit }));
 vi.mock("@/lib/whatsapp", () => ({ sendOrderStatusNotification: mocks.send, WhatsAppError: class extends Error {} }));
@@ -16,21 +16,21 @@ const request = (body: unknown) => new Request("http://localhost/api/whatsapp/no
 describe("purpose-bound WhatsApp notifications", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.auth.mockResolvedValue({ user: { restaurantId: "tenant-a", roles: ["STAFF"] } });
+    mocks.access.mockResolvedValue({ ok: true, restaurantId: "tenant-a", session: { user: { id: "user-a" } } });
     mocks.rateLimit.mockResolvedValue({ allowed: true });
     mocks.findFirst.mockResolvedValue({ id: orderId, orderNumber: "1", customerPhone: "+20100", accessToken: "token", status: "READY", restaurant: { name: "A", nameAr: null, locale: "en" } });
     mocks.send.mockResolvedValue({ sent: true });
   });
 
   it.each(["STAFF", "RESTAURANT_OWNER", "SUPER_ADMIN"])("allows an authorized %s tenant order", async (role) => {
-    mocks.auth.mockResolvedValue({ user: { restaurantId: "tenant-a", roles: [role] } });
+    mocks.access.mockResolvedValue({ ok: true, restaurantId: "tenant-a", session: { user: { id: "user-a", roles: [role] } } });
     expect((await POST(request({ orderId, status: "READY" }))).status).toBe(200);
     expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: orderId, restaurantId: "tenant-a", status: "READY" } }));
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ customerPhone: "+20100", orderId }));
   });
 
   it("fails closed without a valid tenant session", async () => {
-    mocks.auth.mockResolvedValue(null);
+    mocks.access.mockResolvedValue({ ok: false, response: Response.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 }) });
     expect((await POST(request({ orderId, status: "READY" }))).status).toBe(401);
     expect(mocks.send).not.toHaveBeenCalled();
   });

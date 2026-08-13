@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { authorizeTenantApi } from "@/lib/current-authorization";
 import { prisma } from "@/lib/prisma";
 import { parseImageUrl, parseProductImport, productMatchKey, type ProductImportRow } from "@/lib/product-import";
 import { allowedImageHost } from "@/lib/image-import-security";
@@ -8,6 +8,8 @@ import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import { featureLimit } from "@/lib/subscription-plans";
 import { assertTenantQuota } from "@/lib/quota";
+import { beginImportOperation } from "@/lib/import-guard";
+import { rateLimitError } from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -52,10 +54,12 @@ async function validateImage(row: ProductImportRow) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const restaurantId = session?.user?.restaurantId;
-  if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
-    return apiError("UNAUTHORIZED", 401);
+  const access = await authorizeTenantApi();
+  if (!access.ok) return access.response;
+  const { restaurantId, session } = access;
+  const guard = await beginImportOperation(session.user.id, restaurantId, "spreadsheet");
+  if (!guard.allowed) return guard.reason === "rate" ? rateLimitError(guard.retryAfter) : apiError("IMPORT_IN_PROGRESS", 409);
+  try {
   const form = await request.formData();
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0)
@@ -69,7 +73,6 @@ export async function POST(request: Request) {
       : null;
   if (!extension)
     return apiError("UNSUPPORTED_FILE", 400);
-  try {
     const parsed = await parseProductImport(await file.arrayBuffer(), extension);
     if (parsed.errors.length)
       return apiError("INVALID_IMPORT_ROWS", 422, parsed.errors.slice(0, 12));
@@ -214,5 +217,7 @@ export async function POST(request: Request) {
     return Response.json({ created, updated });
   } catch (error) {
     logApiError("product-import", error, { restaurantId }); return apiError("IMPORT_FAILED", 400);
+  } finally {
+    await guard.release();
   }
 }

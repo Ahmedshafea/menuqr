@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { auth } from "@/auth";
+import { authorizeTenantApi } from "@/lib/current-authorization";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { extractMenuFromPdf } from "@/lib/gemini-menu-import";
 import { assertPdfFile, MAX_PDF_MENU_BYTES, PDF_IMPORT_BUCKET } from "@/lib/pdf-menu-import";
-import { rateLimit } from "@/lib/rate-limit";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { hasFeature } from "@/lib/subscription-plans";
+import { beginImportOperation } from "@/lib/import-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,16 +17,17 @@ function errorCode(error: unknown) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const restaurantId = session?.user.restaurantId;
-  if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
-    return apiError("UNAUTHORIZED", 401);
+  const access = await authorizeTenantApi();
+  if (!access.ok) return access.response;
+  const { restaurantId, session } = access;
   if (!(await hasFeature(restaurantId, "PDF_IMPORT"))) return apiError("FEATURE_NOT_AVAILABLE", 403);
-  const limit = await rateLimit(`pdf-import-analyze:${restaurantId}`, 3, 15 * 60 * 1000);
-  if (!limit.allowed) return rateLimitError(limit.retryAfter);
+  const guard = await beginImportOperation(session.user.id, restaurantId, "pdf-analyze");
+  if (!guard.allowed) return guard.reason === "rate" ? rateLimitError(guard.retryAfter) : apiError("IMPORT_IN_PROGRESS", 409);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || !parsed.data.path.startsWith(`${restaurantId}/`) || !parsed.data.path.endsWith(".pdf") || parsed.data.path.includes(".."))
+  if (!parsed.success || !parsed.data.path.startsWith(`${restaurantId}/`) || !parsed.data.path.endsWith(".pdf") || parsed.data.path.includes("..")) {
+    await guard.release();
     return apiError("INVALID_PDF_PATH", 400);
+  }
   const supabase = createSupabaseAdmin();
   try {
     const { data, error } = await supabase.storage.from(PDF_IMPORT_BUCKET).download(parsed.data.path);
@@ -43,5 +44,6 @@ export async function POST(request: Request) {
     return apiError(code, status);
   } finally {
     await supabase.storage.from(PDF_IMPORT_BUCKET).remove([parsed.data.path]);
+    await guard.release();
   }
 }

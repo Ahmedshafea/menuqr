@@ -21,7 +21,7 @@ async function updateAccount(data: FormData) {
 
 async function setTemporaryPassword(data: FormData) {
   "use server"; const session = await requireSuperAdmin(); const parsed = z.object({ id: z.string().cuid(), password: z.string().min(10).max(128).regex(/[A-Z]/).regex(/[0-9]/) }).parse({ id: data.get("id"), password: data.get("password") }); const passwordHash = await hash(parsed.password, 12);
-  await prisma.$transaction([prisma.user.update({ where: { id: parsed.id }, data: { passwordHash } }), prisma.passwordResetToken.deleteMany({ where: { userId: parsed.id } }), prisma.auditLog.create({ data: { action: "USER_PASSWORD_RESET_BY_ADMIN", entity: "User", entityId: parsed.id, userId: session.user.id, metadata: { passwordLogged: false } } })]); revalidateTag("user-access"); revalidatePath(`/super-admin/users/${parsed.id}`);
+  await prisma.$transaction([prisma.user.update({ where: { id: parsed.id }, data: { passwordHash, sessionVersion: { increment: 1 } } }), prisma.passwordResetToken.deleteMany({ where: { userId: parsed.id } }), prisma.auditLog.create({ data: { action: "USER_PASSWORD_RESET_BY_ADMIN", entity: "User", entityId: parsed.id, userId: session.user.id, metadata: { passwordLogged: false } } })]); revalidateTag("user-access"); revalidatePath(`/super-admin/users/${parsed.id}`);
 }
 
 export default async function UserDetailsPage({ params }: { params: Promise<{ id: string }> }) {

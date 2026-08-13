@@ -96,6 +96,23 @@ export async function POST(request: Request) {
     },
   });
   if (!restaurant?.isActive) return apiError("RESTAURANT_UNAVAILABLE", 404);
+  if (data.clientRequestId) {
+    const existingOrder = await prisma.order.findUnique({
+      where: {
+        restaurantId_clientRequestId: {
+          restaurantId: restaurant.id,
+          clientRequestId: data.clientRequestId,
+        },
+      },
+      select: { id: true, orderNumber: true, accessToken: true },
+    });
+    if (existingOrder)
+      return Response.json({
+        orderId: existingOrder.id,
+        orderNumber: existingOrder.orderNumber,
+        trackingUrl: publicOrderUrl(existingOrder.accessToken, request.url),
+      });
+  }
   const selectedBranch = data.branchId
     ? restaurant.branches.find((branch) => branch.id === data.branchId)
     : restaurant.branches.length === 1
@@ -277,6 +294,7 @@ export async function POST(request: Request) {
         originalSubtotal: pricing.subtotal,
         finalSubtotal: pricing.discountedSubtotal,
         couponCode: promotionCalculation.couponCode,
+        clientRequestId: data.clientRequestId,
         discountAmount: pricing.discountAmount,
         deliveryFee: pricing.deliveryFee,
         serviceFee: pricing.serviceFee,
@@ -350,6 +368,23 @@ export async function POST(request: Request) {
     return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
+    if (data.clientRequestId) {
+      const existingOrder = await prisma.order.findUnique({
+        where: {
+          restaurantId_clientRequestId: {
+            restaurantId: restaurant.id,
+            clientRequestId: data.clientRequestId,
+          },
+        },
+        select: { id: true, orderNumber: true, accessToken: true },
+      });
+      if (existingOrder)
+        return Response.json({
+          orderId: existingOrder.id,
+          orderNumber: existingOrder.orderNumber,
+          trackingUrl: publicOrderUrl(existingOrder.accessToken, request.url),
+        });
+    }
     if (
       (error instanceof Error &&
         ["PROMOTION_USAGE_CONFLICT", "COUPON_USAGE_CONFLICT", "INVENTORY_CONFLICT"].includes(

@@ -1,11 +1,13 @@
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { calculateOrderPricing } from "@/lib/order-pricing";
+import { getCurrentUserAuthorization } from "@/lib/current-authorization";
 
 export async function requireManagedOrder(accessToken: string) {
-  const session = await auth();
-  if (!session) throw new Error("UNAUTHORIZED");
+  const current = await getCurrentUserAuthorization();
+  if (current.status === "unauthenticated") throw new Error("UNAUTHORIZED");
+  if (current.status !== "authorized") throw new Error("FORBIDDEN");
+  const session = current.session;
   const order = await prisma.order.findUnique({
     where: { accessToken },
     select: {
@@ -27,21 +29,11 @@ export async function requireManagedOrder(accessToken: string) {
     },
   });
   if (!order) throw new Error("ORDER_NOT_FOUND");
-  const superAdmin = session.user.roles.includes("SUPER_ADMIN");
-  const membership = superAdmin
-    ? true
-    : Boolean(
-        await prisma.restaurantMember.findUnique({
-          where: {
-            userId_restaurantId: {
-              userId: session.user.id,
-              restaurantId: order.restaurantId,
-            },
-          },
-          select: { id: true },
-        }),
-      );
-  if (!membership) throw new Error("FORBIDDEN");
+  const superAdmin = current.globalRoles.includes("SUPER_ADMIN");
+  const membership = current.memberships.find(({ restaurantId }) => restaurantId === order.restaurantId);
+  if (!superAdmin && (!membership || !membership.restaurant.isActive || !["RESTAURANT_OWNER", "STAFF"].includes(membership.role)))
+    throw new Error("FORBIDDEN");
+  session.user.roles = current.globalRoles;
   return { order, session };
 }
 

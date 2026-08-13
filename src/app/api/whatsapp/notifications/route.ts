@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { auth } from "@/auth";
+import { authorizeTenantApi } from "@/lib/current-authorization";
 import { prisma } from "@/lib/prisma";
 import { apiError, logApiError, rateLimitError } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
@@ -14,10 +14,9 @@ const schema = z.object({
 }).strict();
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const restaurantId = session?.user.restaurantId;
-  if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
-    return apiError("UNAUTHORIZED", 401);
+  const access = await authorizeTenantApi();
+  if (!access.ok) return access.response;
+  const { restaurantId } = access;
   const limited = await rateLimit(`whatsapp-notifications:${restaurantId}`, 60, 10 * 60_000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const parsed = schema.safeParse(await request.json().catch(() => null));

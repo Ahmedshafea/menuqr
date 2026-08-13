@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Heart, LayoutGrid, List, MapPin, Minus, Plus, Search, ShoppingBag, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
@@ -75,6 +75,7 @@ export function MenuClient({
   const productDetailsText = useTranslations("productDetails");
   const promotionText = useTranslations("promotions.checkout");
   const branchText = useTranslations("branches");
+  const quantityText = useTranslations("launchPolish.closed");
   const locale = useLocale();
   const defaultFulfillment = restaurant.fulfillment.delivery
     ? "DELIVERY"
@@ -85,6 +86,10 @@ export function MenuClient({
   const [category, setCategory] = useState("__all");
   const [cart, setCart] = useState<Record<string, number>>(initialCart);
   const [open, setOpen] = useState(initialOpen);
+  const cartTriggerRef = useRef<HTMLButtonElement>(null);
+  const cartDialogRef = useRef<HTMLDivElement>(null);
+  const submittingRef = useRef(false);
+  const clientRequestIdRef = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
@@ -127,6 +132,19 @@ export function MenuClient({
         selectedBranchId,
       );
   }, [restaurant.slug, selectedBranchId]);
+  useEffect(() => {
+    if (!open) return;
+    const trigger = cartTriggerRef.current;
+    cartDialogRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      trigger?.focus();
+    };
+  }, [open]);
   const changeViewMode = (mode: "grid" | "list") => {
     setViewMode(mode);
     window.localStorage.setItem("menuqr-menu-view", mode);
@@ -281,13 +299,15 @@ export function MenuClient({
   };
   async function checkout(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError("");
     const form = new FormData(event.currentTarget);
     for (const product of products.filter((item)=>cart[item.id])) {
       for (const group of product.optionGroups) {
         const count=group.options.filter((option)=>selectedExtras[product.id]?.includes(option.id)).length;
-        if(count<group.min||count>group.max){setError(validationText("selectionRange",{min:group.min,max:group.max,group:group.name}));setLoading(false);return;}
+        if(count<group.min||count>group.max){setError(validationText("selectionRange",{min:group.min,max:group.max,group:group.name}));setLoading(false);submittingRef.current=false;return;}
       }
     }
     const orderItems = products
@@ -312,13 +332,18 @@ export function MenuClient({
         `${demoText("previewTitle")}\n${restaurant.name}\n\n${lines.join("\n")}\n\n${t("total")}: ${money(pricing.total)}\n\n${demoText("notSent")}`,
       );
       setLoading(false);
+      submittingRef.current = false;
       return;
     }
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    clientRequestIdRef.current ??= crypto.randomUUID();
+    let response: Response;
+    try {
+      response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
         restaurantSlug: restaurant.slug,
+        clientRequestId: clientRequestIdRef.current,
         branchId: selectedBranchId || undefined,
         customerName: form.get("name"),
         customerPhone: form.get("phone"),
@@ -343,12 +368,18 @@ export function MenuClient({
         password: createAccount ? form.get("password") : undefined,
         turnstileToken,
         couponCode: appliedCoupon || undefined,
-        items: orderItems,
-      }),
-    });
-    const body = await response.json();
+          items: orderItems,
+        }),
+      });
+    } catch {
+      setError(t("orderFailed"));
+      setLoading(false);
+      submittingRef.current = false;
+      return;
+    }
+    const body = await response.json().catch(() => null);
     if (!response.ok) {
-      const code = body.error?.code;
+      const code = body?.error?.code;
       setError(
         code?.startsWith("COUPON_")
           ? promotionText.has(code)
@@ -365,6 +396,7 @@ export function MenuClient({
           : (code ?? common("noData")),
       );
       setLoading(false);
+      submittingRef.current = false;
       return;
     }
     window.location.href = body.trackingUrl;
@@ -457,11 +489,11 @@ export function MenuClient({
                   </div>
                   {cart[product.id] ? (
                     <div className="qty">
-                      <button onClick={() => update(product.id, -1)}>
+                      <button aria-label={`${product.name}: ${quantityText("decrease")}`} onClick={() => update(product.id, -1)}>
                         <Minus />
                       </button>
                       <b>{cart[product.id]}</b>
-                      <button onClick={() => update(product.id, 1)}>
+                      <button aria-label={`${product.name}: ${quantityText("increase")}`} onClick={() => update(product.id, 1)}>
                         <Plus />
                       </button>
                     </div>
@@ -519,7 +551,7 @@ export function MenuClient({
         <p>{t("empty")}</p>
       )}
       {count > 0 && (
-        <button className="cart-bar" onClick={() => setOpen(true)}>
+        <button ref={cartTriggerRef} className="cart-bar" onClick={() => setOpen(true)}>
           <span>
             <ShoppingBag />
             {t("cart", { count })}
@@ -531,11 +563,11 @@ export function MenuClient({
       )}
       {open && (
         <div className="cart-overlay">
-          <div className="cart-sheet">
-            <button className="close" onClick={() => setOpen(false)}>
+          <div ref={cartDialogRef} className="cart-sheet" role="dialog" aria-modal="true" aria-labelledby="cart-dialog-title" tabIndex={-1}>
+            <button type="button" className="close" aria-label={common("close")} onClick={() => setOpen(false)}>
               <X />
             </button>
-            <h2>{t("yourOrder")}</h2>
+            <h2 id="cart-dialog-title">{t("yourOrder")}</h2>
             <p>{t("checkoutHelp")}</p>
             <div className="checkout-step-progress"><i style={{width:`${((checkoutStep+1)/3)*100}%`}}/><span>{checkoutStep+1} / 3</span></div>
             <div className={`checkout-step-panel ${checkoutStep === 0 ? "is-active" : ""}`}>

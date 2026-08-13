@@ -20,12 +20,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .safeParse(raw);
         if (!parsed.success) return null;
         const buckets = loginRateLimitKeys(parsed.data.email, requestIp(request));
-        const [clientLimit, pairLimit] = await Promise.all([
+        const [clientLimit, pairLimit, accountLimit] = await Promise.all([
           rateLimit(buckets.client, 50, 15 * 60_000),
           rateLimit(buckets.pair, 10, 15 * 60_000),
+          rateLimit(buckets.account, 100, 60 * 60_000),
         ]);
-        if (!clientLimit.allowed || !pairLimit.allowed) return null;
-        await rateLimit(buckets.account, 100, 60 * 60_000);
+        if (!clientLimit.allowed || !pairLimit.allowed || !accountLimit.allowed)
+          return null;
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
           select: {
@@ -34,6 +35,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: true,
             passwordHash: true,
             isActive: true,
+            sessionVersion: true,
             roles: { select: { role: true } },
             restaurantMemberships: {
               select: { restaurantId: true },
@@ -51,6 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           roles: user.roles.map((item) => item.role),
           restaurantId: user.restaurantMemberships[0]?.restaurantId ?? null,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -68,7 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { phone: { in: [phone, phone.slice(1)] } },
           take: 2,
           select: {
-            id: true, name: true, email: true, isActive: true,
+            id: true, name: true, email: true, isActive: true, sessionVersion: true,
             roles: { select: { role: true } },
             restaurantMemberships: { select: { restaurantId: true }, orderBy: { createdAt: "asc" }, take: 1 },
           },
@@ -77,7 +80,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = matches[0];
         if (!user.isActive) return null;
         await prisma.user.update({ where: { id: user.id }, data: { phone, phoneVerifiedAt: new Date() } });
-        return { id: user.id, name: user.name, email: user.email, roles: user.roles.map((item) => item.role), restaurantId: user.restaurantMemberships[0]?.restaurantId ?? null };
+        return { id: user.id, name: user.name, email: user.email, roles: user.roles.map((item) => item.role), restaurantId: user.restaurantMemberships[0]?.restaurantId ?? null, sessionVersion: user.sessionVersion };
       },
     }),
   ],
@@ -86,7 +89,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.roles = user.roles;
         token.restaurantId = user.restaurantId;
+        token.sessionVersion = user.sessionVersion;
       } else if (token.sub) {
+        const current = await prisma.user.findUnique({ where: { id: token.sub }, select: { isActive: true, sessionVersion: true } });
+        if (!current?.isActive || token.sessionVersion !== current.sessionVersion) return null;
         const identity = await getCachedUserAccess(token.sub);
         token.roles = identity?.isActive ? identity.roles.map((item) => item.role) : [];
         token.restaurantId = identity?.isActive ? identity.restaurantMemberships[0]?.restaurantId ?? null : null;

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient, type OrderStatus } from "@prisma/client";
 import { transitionOrder } from "@/lib/order-lifecycle";
+import { getOrderAnalyticsSummary } from "@/lib/analytics-orders";
 
 const suite = process.env.PHASE23_PG_TEST === "1" ? describe : describe.skip;
 
@@ -91,5 +92,46 @@ suite("authoritative order lifecycle on real PostgreSQL", () => {
     expect(await db.billingCheckoutIntent.findUnique({ where: { id: intent.id } })).not.toBeNull();
     expect(await db.whatsAppOtp.findUnique({ where: { id: otp.id } })).not.toBeNull();
     expect(await db.rateLimitBucket.findUnique({ where: { key: bucket.key } })).not.toBeNull();
+  });
+
+  it("allows only one order for a restaurant idempotency key", async () => {
+    const clientRequestId = crypto.randomUUID();
+    const create = () => db.order.create({ data: {
+      orderNumber: `P23-${crypto.randomUUID()}`,
+      customerName: "retry-safe",
+      customerPhone: "1",
+      subtotal: 1,
+      total: 1,
+      accessToken: `p23-${crypto.randomUUID()}`,
+      restaurantId: restaurantA,
+      clientRequestId,
+    } });
+    const results = await Promise.allSettled([create(), create()]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(await db.order.count({ where: { restaurantId: restaurantA, clientRequestId } })).toBe(1);
+  });
+
+  it("aggregates dashboard order analytics without loading order rows", async () => {
+    const start = new Date(Date.now() - 60_000);
+    const deliveredAt = new Date();
+    const outForDeliveryAt = new Date(deliveredAt.getTime() - 20 * 60_000);
+    await db.order.create({ data: {
+      orderNumber: `P23-${crypto.randomUUID()}`,
+      customerName: "analytics",
+      customerPhone: "1",
+      subtotal: 12,
+      total: 12,
+      accessToken: `p23-${crypto.randomUUID()}`,
+      restaurantId: restaurantA,
+      status: "COMPLETED",
+      fulfillmentType: "DELIVERY",
+      outForDeliveryAt,
+      deliveredAt,
+    } });
+    const summary = await getOrderAnalyticsSummary(restaurantA, start, db);
+    expect(summary.byStatus.find((row) => row.status === "COMPLETED")?._count._all).toBeGreaterThanOrEqual(1);
+    expect(summary.byFulfillment.find((row) => row.fulfillmentType === "DELIVERY")?._count._all).toBeGreaterThanOrEqual(1);
+    expect(summary.daily.reduce((sum, row) => sum + row.count, 0)).toBeGreaterThanOrEqual(1);
+    expect(summary.averageDeliveryMinutes).toBeCloseTo(20, 0);
   });
 });

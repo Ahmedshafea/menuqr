@@ -43,7 +43,7 @@ export default async function CustomerProfilePage({
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) redirect("/account/profile?password=invalid");
     const identity = await prisma.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { passwordHash: true } });
     if (!(await compare(currentPassword, identity.passwordHash))) redirect("/account/profile?password=incorrect");
-    await prisma.user.update({ where: { id: session.user.id }, data: { passwordHash: await hash(newPassword, 12) } });
+    await prisma.user.update({ where: { id: session.user.id }, data: { passwordHash: await hash(newPassword, 12), sessionVersion: { increment: 1 } } });
     redirect("/account/profile?password=changed");
   }
 

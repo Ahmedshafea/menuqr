@@ -1,8 +1,9 @@
 import { forbidden } from "next/navigation";
-import { auth } from "@/auth";
+import { getCurrentUserAuthorization } from "@/lib/current-authorization";
 
 export async function requireSuperAdmin() {
-  const session = await auth();
-  if (!session?.user.roles.includes("SUPER_ADMIN")) forbidden();
-  return session;
+  const current = await getCurrentUserAuthorization();
+  if (current.status !== "authorized" || !current.globalRoles.includes("SUPER_ADMIN")) forbidden();
+  current.session.user.roles = current.globalRoles;
+  return current.session;
 }

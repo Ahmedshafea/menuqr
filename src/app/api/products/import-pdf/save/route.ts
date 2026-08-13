@@ -1,23 +1,26 @@
 import { revalidateTag } from "next/cache";
-import { auth } from "@/auth";
+import { authorizeTenantApi } from "@/lib/current-authorization";
 import { apiError, logApiError } from "@/lib/api";
 import { normalizePdfMenu, pdfMenuSchema } from "@/lib/pdf-menu-import";
 import { prisma } from "@/lib/prisma";
 import { productMatchKey } from "@/lib/product-import";
 import { featureLimit, hasFeature } from "@/lib/subscription-plans";
 import { assertTenantQuota } from "@/lib/quota";
+import { beginImportOperation } from "@/lib/import-guard";
+import { rateLimitError } from "@/lib/api";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const restaurantId = session?.user.restaurantId;
-  if (!restaurantId || !session.user.roles.some((role) => ["RESTAURANT_OWNER", "STAFF", "SUPER_ADMIN"].includes(role)))
-    return apiError("UNAUTHORIZED", 401);
+  const access = await authorizeTenantApi();
+  if (!access.ok) return access.response;
+  const { restaurantId, session } = access;
+  const guard = await beginImportOperation(session.user.id, restaurantId, "pdf-save");
+  if (!guard.allowed) return guard.reason === "rate" ? rateLimitError(guard.retryAfter) : apiError("IMPORT_IN_PROGRESS", 409);
+  try {
   if (!(await hasFeature(restaurantId, "PDF_IMPORT"))) return apiError("FEATURE_NOT_AVAILABLE", 403);
   const parsed = pdfMenuSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return apiError("INVALID_IMPORT_DATA", 422, parsed.error.flatten());
-  try {
     const menu = normalizePdfMenu(parsed.data);
     const [existingCategories, existingProducts] = await Promise.all([
       prisma.category.findMany({ where: { restaurantId }, select: { id: true, name: true, nameAr: true, sortOrder: true } }),
@@ -88,5 +91,7 @@ export async function POST(request: Request) {
   } catch (error) {
     logApiError("pdf-menu-save", error, { restaurantId });
     return apiError("PDF_IMPORT_SAVE_FAILED", 500);
+  } finally {
+    await guard.release();
   }
 }
