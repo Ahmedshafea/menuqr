@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   class ProviderError extends Error {
@@ -21,20 +21,27 @@ import { POST } from "@/app/api/whatsapp/send-otp/route";
 const request = () => new Request("http://localhost/api/whatsapp/send-otp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: "+201000000000", language: "en" }) });
 
 describe("public WhatsApp OTP errors", () => {
+  let info: ReturnType<typeof vi.spyOn>;
+  let failure: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rateLimit.mockResolvedValue({ allowed: true });
     mocks.upsert.mockResolvedValue({});
     mocks.remove.mockResolvedValue({ count: 1 });
+    info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    failure = vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it("removes provider diagnostics from public 4xx errors", async () => {
     mocks.send.mockRejectedValue(new mocks.ProviderError("META_PROVIDER_ERROR", 400, undefined, { httpStatus: 400, code: 131000, subcode: 123, message: "sensitive provider diagnostic" }));
     const response = await POST(request());
-    const body = await response.text();
+    const body = await response.json();
     expect(response.status).toBe(502);
-    expect(body).toContain("OTP_SEND_FAILED");
-    expect(body).not.toMatch(/131000|123|sensitive provider diagnostic|META_PROVIDER_ERROR/);
+    expect(body).toEqual({ error: { code: "OTP_SEND_FAILED", details: { requestId: expect.any(String) } } });
+    const logs = [...info.mock.calls, ...failure.mock.calls].flat().join(" ");
+    expect(logs).not.toMatch(/\+201000000000|123456|131000|sensitive provider diagnostic|META_PROVIDER_ERROR/);
   });
 
   it.each([

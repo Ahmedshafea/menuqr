@@ -10,6 +10,12 @@ export function loginRateLimitKeys(email: string, ip: string) {
   return { account: `auth-login-account:${identity}`, client: `auth-login-ip:${client}`, pair: `auth-login-pair:${identity}:${client}` };
 }
 
+export function passwordChangeRateLimitKeys(userId: string, ip: string) {
+  const identity = createHash("sha256").update(userId).digest("hex");
+  const client = createHash("sha256").update(ip || "unknown").digest("hex");
+  return { account: `password-change-account:${identity}`, client: `password-change-ip:${client}` };
+}
+
 export async function rateLimit(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
   const rows = await prisma.$queryRaw<Array<{ count: number; resetAt: Date }>>`
     INSERT INTO "RateLimitBucket" ("key", "count", "resetAt", "updatedAt")
@@ -33,7 +39,11 @@ export async function clearRateLimit(...keys: string[]) {
 }
 
 export function requestIp(request: Request) {
-  if (process.env.VERCEL) return request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-  if (process.env.CF_PAGES) return request.headers.get("cf-connecting-ip") || "unknown";
-  return process.env.NODE_ENV === "development" ? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown" : request.headers.get("x-real-ip") || "unknown";
+  return requestIpFromHeaders(request.headers);
+}
+
+export function requestIpFromHeaders(headers: Headers) {
+  if (process.env.VERCEL) return headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || "unknown";
+  if (process.env.CF_PAGES) return headers.get("cf-connecting-ip") || "unknown";
+  return process.env.NODE_ENV === "development" ? headers.get("x-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || "unknown" : headers.get("x-real-ip") || "unknown";
 }

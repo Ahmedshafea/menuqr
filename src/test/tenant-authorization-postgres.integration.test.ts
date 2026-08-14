@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ session: null as null | { user: { id: string; roles: string[]; restaurantId: string | null } } }));
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => state.session) }));
@@ -19,7 +18,7 @@ import { cleanupOperationalRecords } from "@/lib/operational-retention";
 const suite = process.env.PHASE241_PG_TEST === "1" ? describe : describe.skip;
 
 suite("Phase 2.4.1 live tenant authorization on PostgreSQL", () => {
-  const db = new PrismaClient();
+  const db = prisma;
   const run = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let userId: string;
   let restaurantA: string;
@@ -45,8 +44,6 @@ suite("Phase 2.4.1 live tenant authorization on PostgreSQL", () => {
     userId = user.id;
     state.session = { user: { id: userId, roles: ["STAFF"], restaurantId: restaurantA } };
   });
-
-  afterAll(() => Promise.all([db.$disconnect(), prisma.$disconnect()]));
 
   it("allows an active STAFF membership", async () => {
     await expect(requireTenant()).resolves.toMatchObject({ restaurantId: restaurantA, membershipRole: "STAFF" });
@@ -133,6 +130,8 @@ suite("Phase 2.4.1 live tenant authorization on PostgreSQL", () => {
     await db.$executeRaw`INSERT INTO "RateLimitBucket" ("key", "count", "resetAt", "updatedAt") VALUES (${expiredRate}, 1, NOW() - INTERVAL '2 hours', NOW()), (${activeRate}, 1, NOW() + INTERVAL '1 hour', NOW())`;
     const expiredPhone = `+cleanup${Date.now()}`;
     const validPhone = `${expiredPhone}1`;
+    const billing = await db.billingEvent.create({ data: { provider: "test", providerEventId: `retention-${run}`, eventName: "test" } });
+    const audit = await db.auditLog.create({ data: { action: "RETENTION_TEST", entity: "Test", entityId: run } });
     await db.$executeRaw`INSERT INTO "WhatsAppOtp" ("id", "phone", "codeHash", "expiresAt", "attempts", "createdAt", "updatedAt") VALUES (${`old-${run}`}, ${expiredPhone}, 'x', NOW() - INTERVAL '2 days', 0, NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days'), (${`valid-${run}`}, ${validPhone}, 'x', NOW() + INTERVAL '1 hour', 0, NOW(), NOW())`;
     const first = await cleanupOperationalRecords();
     const second = await cleanupOperationalRecords();
@@ -141,6 +140,8 @@ suite("Phase 2.4.1 live tenant authorization on PostgreSQL", () => {
     expect(second).toMatchObject({ rateLimitBuckets: 0, whatsAppOtps: 0 });
     expect(await db.rateLimitBucket.findUnique({ where: { key: activeRate } })).not.toBeNull();
     expect(await db.whatsAppOtp.findUnique({ where: { phone: validPhone } })).not.toBeNull();
+    expect(await db.billingEvent.findUnique({ where: { id: billing.id } })).not.toBeNull();
+    expect(await db.auditLog.findUnique({ where: { id: audit.id } })).not.toBeNull();
   });
 
   it("bounds deterministic import-lease cleanup and preserves active leases", async () => {

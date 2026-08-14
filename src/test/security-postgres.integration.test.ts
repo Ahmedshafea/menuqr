@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { prisma as db } from "@/lib/prisma";
 import { adjustInventory, restoreOrderInventory } from "@/lib/inventory";
 import { assertTenantQuota } from "@/lib/quota";
 
@@ -9,7 +9,6 @@ const enabled = process.env.PHASE21_PG_TEST === "1";
 const suite = enabled ? describe : describe.skip;
 
 suite("Phase 2.1 real PostgreSQL security", () => {
-  const db = new PrismaClient();
   const run = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let restaurantA: string, restaurantB: string, categoryA: string, productA: string, orderA: string;
 
@@ -31,8 +30,6 @@ suite("Phase 2.1 real PostgreSQL security", () => {
     const order = await db.order.create({ data: { orderNumber: `P21-${run}`, customerName: "Test", customerPhone: "1", subtotal: 10, total: 10, accessToken: `p21-token-${run}`, restaurantId: restaurantA, items: { create: { productName: "Tracked", unitPrice: 10, quantity: 1, productId: product.id } } } });
     orderA = order.id;
   }, 30_000);
-
-  afterAll(async () => { await db.$disconnect(); });
 
   it("allows only one concurrent claim for the final inventory unit", async () => {
     await db.product.update({ where: { id: productA }, data: { stock: 1 } });

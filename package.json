@@ -54,7 +54,10 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "nanoid": "3.3.17",
+    "@emnapi/core": "1.11.1",
+    "@emnapi/wasi-threads": "1.2.2",
+    "@swc/helpers": "0.5.17",
+    "nanoid": "3.3.18",
     "postcss": "8.5.26",
     "sharp": "0.35.3"
   }

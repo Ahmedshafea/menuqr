@@ -1,12 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PrismaClient, type OrderStatus } from "@prisma/client";
+import { beforeAll, describe, expect, it } from "vitest";
+import type { OrderStatus } from "@prisma/client";
+import { prisma as db } from "@/lib/prisma";
 import { transitionOrder } from "@/lib/order-lifecycle";
 import { getOrderAnalyticsSummary } from "@/lib/analytics-orders";
 
 const suite = process.env.PHASE23_PG_TEST === "1" ? describe : describe.skip;
 
 suite("authoritative order lifecycle on real PostgreSQL", () => {
-  const db = new PrismaClient();
   const run = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let restaurantA: string, restaurantB: string, actorUserId: string, driverA: string, driverB: string, categoryA: string;
 
@@ -26,8 +26,6 @@ suite("authoritative order lifecycle on real PostgreSQL", () => {
     ]);
     driverA = aDriver.id; driverB = bDriver.id; categoryA = category.id;
   });
-
-  afterAll(() => db.$disconnect());
 
   async function order(status: OrderStatus, tracked = false) {
     const product = tracked ? await db.product.create({ data: { name: "Tracked", price: 1, stock: 0, restaurantId: restaurantA, categoryId: categoryA } }) : null;

@@ -220,7 +220,7 @@ model Branch {
   isActive              Boolean           @default(true)
   restaurantId          String
   createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  updatedAt             DateTime          @default(now()) @updatedAt
   restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orders                Order[]
   workingHours          WorkingHour[]
@@ -468,7 +468,7 @@ model Plan {
   customDomain           Boolean                 @default(false)
   lemonSqueezyVariantId  String?                 @unique
   createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  updatedAt              DateTime                @default(now()) @updatedAt
   subscriptions          Subscription[]
   features               PlanFeature[]
   launchPromotions       LaunchPromotion[]
@@ -503,7 +503,7 @@ model Feature {
   isPublic      Boolean          @default(true)
   plans         PlanFeature[]
   createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  updatedAt     DateTime         @default(now()) @updatedAt
 }
 
 model PlanFeature {
@@ -529,7 +529,7 @@ model LaunchPromotion {
   affectedPlan   Plan           @relation(fields: [affectedPlanId], references: [id])
   subscriptions  Subscription[]
   createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  updatedAt      DateTime       @default(now()) @updatedAt
 
   @@index([enabled, startsAt, endsAt])
 }
@@ -542,7 +542,7 @@ model Subscription {
   restaurantId           String
   planId                 String
   createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
+  updatedAt              DateTime           @default(now()) @updatedAt
   trialEndsAt            DateTime?
   launchPromotionId      String?
   provider               String?

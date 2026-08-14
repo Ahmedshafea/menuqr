@@ -121,12 +121,6 @@ function log(level: "info" | "error", event: string, metadata: Record<string, un
   writer(JSON.stringify({ level, context: "whatsapp", event, ...metadata, timestamp: new Date().toISOString() }));
 }
 
-function safeMetaMessage(message: string | undefined) {
-  return message
-    ?.slice(0, 300)
-    .replace(/\+?\d{8,15}/g, "[redacted-phone]");
-}
-
 async function graphRequest<T>(path: string, init: RequestInit, retry = true): Promise<T> {
   const { token, baseUrl } = config();
   const url = `${baseUrl}/${path}`;
@@ -153,9 +147,6 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
           type: component.type,
           parameterCount: component.parameters?.length ?? 0,
         })),
-        recipient: payload.to
-          ? `${payload.to.slice(0, 3)}***${payload.to.slice(-2)}`
-          : undefined,
       };
     } catch {
       payloadSummary = { bodyPresent: true };
@@ -165,7 +156,7 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
     let response: Response;
     try {
       log("info", "api_request", {
-        url,
+        provider: "meta",
         method: init.method || "GET",
         attempt: attempt + 1,
         payload: payloadSummary,
@@ -185,7 +176,7 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
         messages?: Array<{ id?: string; message_status?: string }>;
       };
       log("info", "api_response", {
-        url,
+        provider: "meta",
         status: response.status,
         messageAccepted: Boolean(successful.messages?.[0]?.id),
         messageStatus: successful.messages?.[0]?.message_status,
@@ -206,13 +197,11 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
             ? "WHATSAPP_RATE_LIMITED"
             : "WHATSAPP_API_ERROR";
     log("error", "api_error", {
-      url,
+      provider: "meta",
       templateName: payloadSummary?.templateName,
-      recipient: payloadSummary?.recipient,
       status: response.status,
       metaCode: body.error?.code,
       subcode: body.error?.error_subcode,
-      metaMessage: safeMetaMessage(body.error?.message),
     });
     throw new WhatsAppError(
       code,
@@ -222,7 +211,6 @@ async function graphRequest<T>(path: string, init: RequestInit, retry = true): P
         httpStatus: response.status,
         code: body.error?.code,
         subcode: body.error?.error_subcode,
-        message: safeMetaMessage(body.error?.message),
       },
     );
   }

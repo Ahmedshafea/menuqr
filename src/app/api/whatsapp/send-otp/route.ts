@@ -133,25 +133,17 @@ export async function POST(request: Request) {
     }));
     return Response.json({ sent: true });
   } catch (error) {
-    const code =
-      error instanceof WhatsAppError
-        ? error.code
-        : error instanceof Error
-          ? error.message
-          : "OTP_SEND_FAILED";
     debug(requestId, "STOP_ERROR", {
-      reason: code,
+      reason: "OTP_SEND_FAILED",
       status: error instanceof WhatsAppError ? error.status : 500,
       ...(error instanceof WhatsAppError
         ? {
-            metaHttpStatus: error.meta?.httpStatus,
-            metaCode: error.meta?.code,
-            metaSubcode: error.meta?.subcode,
-            metaMessage: error.meta?.message,
+            provider: "meta",
+            providerStatus: error.meta?.httpStatus,
           }
         : {}),
     });
-    logApiError("whatsapp-send-otp", error, { requestId });
+    logApiError("whatsapp-send-otp", new Error("OTP_SEND_FAILED"), { requestId });
     if (error instanceof WhatsAppError)
       return apiError("OTP_SEND_FAILED", error.status >= 500 ? 503 : 502, {
         ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}),
