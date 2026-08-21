@@ -20,13 +20,31 @@ const schema = z
     message: "PASSWORD_MISMATCH",
   });
 
+type PasswordResetRejectionReason =
+  | "schema_validation"
+  | "otp_length"
+  | "user_match_zero"
+  | "user_match_ambiguous";
+
+function rejectPasswordReset(reason: PasswordResetRejectionReason) {
+  console.info(JSON.stringify({
+    level: "info",
+    context: "password-reset",
+    event: "password_reset_rejected",
+    reason,
+    timestamp: new Date().toISOString(),
+  }));
+  return apiError("INVALID_PASSWORD_RESET", 400);
+}
+
 export async function POST(request: Request) {
   const ip = requestIp(request);
   const limited = await rateLimit(`password-reset:${ip}`, 5, 15 * 60_000);
   if (!limited.allowed) return rateLimitError(limited.retryAfter);
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || parsed.data.code.length !== OTP_LENGTH)
-    return apiError("INVALID_PASSWORD_RESET", 400);
+  if (!parsed.success) return rejectPasswordReset("schema_validation");
+  if (parsed.data.code.length !== OTP_LENGTH)
+    return rejectPasswordReset("otp_length");
 
   try {
     const phone = normalizeE164(parsed.data.phone);
@@ -35,7 +53,8 @@ export async function POST(request: Request) {
       take: 2,
       select: { id: true },
     });
-    if (users.length !== 1) return apiError("INVALID_PASSWORD_RESET", 400);
+    if (users.length === 0) return rejectPasswordReset("user_match_zero");
+    if (users.length !== 1) return rejectPasswordReset("user_match_ambiguous");
 
     const result = await consumeOtp(phone, parsed.data.code);
     if (result === "expired") return apiError("OTP_EXPIRED", 410);

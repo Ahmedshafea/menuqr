@@ -14,7 +14,7 @@ function authorized(request: Request) {
   return timingSafeEqual(expected, supplied);
 }
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   if (!authorized(request)) return apiError("UNAUTHORIZED", 401, { requestId });
   try {

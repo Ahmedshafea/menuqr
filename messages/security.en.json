@@ -10,7 +10,7 @@
   "resetPassword": "Change password",
   "resetSuccess": "Your password has been changed. You can sign in now.",
   "invalidCode": "The verification code is invalid or expired.",
-  "invalidPassword": "Check the password strength and confirmation.",
+  "invalidPassword": "Check your phone number, verification code, and password details, then try again.",
   "requestFailed": "We could not send the verification code. Please try again later.",
   "resetFailed": "We could not change the password. Check your details and try again.",
   "backToLogin": "Back to sign in",

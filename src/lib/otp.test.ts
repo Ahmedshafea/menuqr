@@ -49,4 +49,14 @@ describe("WhatsApp OTP", () => {
     db.row = { id: "otp-3", phone, codeHash: hashOtp(phone, code), expiresAt: new Date(Date.now() + 60_000), verifiedAt: null, attempts: 5 };
     expect(await consumeOtp(phone, code)).toBe("attempts_exceeded");
   });
+
+  it("allows the correct OTP after one failed attempt and then rejects replay", async () => {
+    const phone = "+201001234567"; const code = "123456".slice(0, OTP_LENGTH);
+    db.row = { id: "otp-4", phone, codeHash: hashOtp(phone, code), expiresAt: new Date(Date.now() + 60_000), verifiedAt: null, attempts: 0 };
+    expect(await consumeOtp(phone, "0".repeat(OTP_LENGTH))).toBe("invalid");
+    expect(db.row?.attempts).toBe(1);
+    expect(db.row?.verifiedAt).toBeNull();
+    expect(await consumeOtp(phone, code)).toBe("verified");
+    expect(await consumeOtp(phone, code)).toBe("invalid");
+  });
 });
